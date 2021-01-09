@@ -5,6 +5,7 @@ import matplotlib
 font = {'size': 16, 'family':"NanumGothic"}
 matplotlib.rc('font', **font)
 import matplotlib.pyplot as plt
+plt.rcParams['axes.unicode_minus'] = False
 
 data_path = 'data/'
 
@@ -150,3 +151,92 @@ idx = train_err['user_id'] == 10000
 err_data = train_err.loc[idx,:].copy()
 del train_err
 
+version = np.array([train_err['fwver'][i][:2] for i in range(train_err.shape[0])])
+
+np.corrcoef(train_err['model_nm'] == 'model_3',
+            version == '05')
+
+#%% version과 model사이의 관계
+version = np.unique(train_err['fwver'])
+
+from collections import defaultdict
+corr_result = defaultdict(list)
+
+from tqdm import tqdm
+for v in tqdm(version):
+    for i in range(9):
+        print(f'model_{i} and version {v}')
+        corr_result[v].append(np.corrcoef((train_err['model_nm'] == 'model_'+str(i)).astype(int),
+                    (train_err['fwver'] == v).astype(int))[0,1])
+corr_result = pd.DataFrame.from_dict(corr_result)
+corr_result.to_csv('result/corr_fwver_model_nm.csv')
+
+#%% 결과 plot
+corr_result = corr_result.reindex(['03.11.1141', '03.11.1149', '03.11.1167', '04.16.2641',
+       '04.16.3345', '04.16.3439', '04.16.3553', '04.16.3569',
+       '04.16.3571', '04.22.1442', '04.22.1656', '04.22.1666',
+       '04.22.1684', '04.22.1750', '04.22.1778', '04.33.1095',
+       '04.33.1125', '04.33.1149', '04.33.1171', '04.33.1185',
+       '04.33.1261', '04.73.2237', '04.73.2571', '04.82.1684',
+       '04.82.1730', '04.82.1778', '05.15.2090', '05.15.2092',
+       '05.15.2114', '05.15.2120', '05.15.2122', '05.15.2138',
+       '05.15.3104', '05.66.3237', '05.66.3571', '8.5.3', '10'], axis=1)
+
+import seaborn as sns
+# correlation
+plt.figure(figsize=(10,5))
+sns.heatmap(corr_result.T)
+# plt.xticks(range(n_features), features, rotation=30)
+plt.title('Correlation between fwver and model_nm')
+plt.show()
+plt.show()
+
+#%% fwver와 quality 관계: distribution
+fwvers = np.unique(train_quality['fwver'].astype(str))
+
+for fwver in fwvers:
+    plt.figure(figsize=(5,3))
+    idx = train_quality['fwver'] == fwver
+    for i in range(13):
+        data = train_quality.loc[idx, 'quality_'+str(i)]
+        data = data[~pd.isnull(data)]
+        plt.hist(data, label=i, bins=50)
+    plt.show()
+    break
+
+#%% fwver와 quality 관계: mean, variance
+plt.figure(figsize=(8,15))
+plt.title('fwvers 03에 대한 quality 평균')
+labels = []
+datas = []
+for fwver in fwvers:
+    idx = train_quality['fwver'] == fwver
+    data = train_quality.loc[idx, 'quality_0':'quality_12']
+    data = data[~pd.isnull(data)]
+    data = np.nanmean(data, axis=0)
+    labels.append(fwver)
+    datas.append(data)
+    break
+datas = np.array(datas)
+
+result = pd.DataFrame(index = labels, data = datas, columns = ['quality_'+str(i) for i in range(13)])
+result = result.T
+result.plot.bar(stacked=True)
+plt.xlabel('Quality number')
+plt.ylabel('Intensity')
+plt.legend(labels)
+plt.tight_layout()
+plt.show()
+result = result.T
+#%% 버전에 따른 quality의 변화
+plt.figure(figsize=(15,8))
+result_n = result / np.nanstd(result, axis=0)
+result_n = result_n.iloc[:-1,:]
+# result = result.iloc[:-1,:]
+# plt.title('Quality와 fwver의 관계')
+import seaborn as sns
+sns.heatmap(result_n.T)
+plt.xticks(rotation=90)
+# plt.xlabel('fwver')
+plt.legend([])
+plt.show()
