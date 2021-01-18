@@ -43,21 +43,21 @@ class Tuning_model(object):
         # LightGBM parameters
         self.space = {
             'objective':                'binary',
-            'learning_rate':            hp.uniform('learning_rate',    0.001, 0.1),
+            'min_child_weight':         hp.quniform('min_child_weight', 1, 10, 1),
+            'learning_rate':            hp.uniform('learning_rate',    0.0001, 0.2),
             'max_depth':                -1,
-            'num_leaves':               hp.quniform('num_leaves',       5, 300, 1),
-            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	50, 300, 1),	# overfitting 안되려면 높은 값
-            'reg_alpha':                hp.uniform('reg_alpha',0,1),
+            'num_leaves':               hp.quniform('num_leaves',       5, 200, 1),
+            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 200, 1),	# overfitting 안되려면 높은 값
+            'reg_alpha':                hp.uniform('reg_alpha',0, 1),
             'reg_lambda':               hp.uniform('reg_lambda',0, 1),
-            'min_child_weight':         hp.quniform('min_child_weight', 1, 30, 1),
             'colsample_bytree':         hp.uniform('colsample_bytree', 0.01, 1.0),
             'colsample_bynode':		    hp.uniform('colsample_bynode',0.01,1.0),
-            'bagging_freq':			    hp.quniform('bagging_freq',	1,20,1),
+            'bagging_freq':			    hp.quniform('bagging_freq',	0,20,1),
             'tree_learner':			    hp.choice('tree_learner',	['serial','feature','data','voting']),
             'subsample':                hp.uniform('subsample', 0.01, 1.0),
-            'boosting':			        hp.choice('boosting', ['gbdt','rf']),
-            'max_bin':			        hp.quniform('max_bin',		3,50,1), # overfitting 안되려면 낮은 값
-            "min_sum_hessian_in_leaf": hp.quniform('min_sum_hessian_in_leaf',       5, 15, 1),
+            'boosting':			        hp.choice('boosting', ['gbdt']),
+            'max_bin':			        hp.quniform('max_bin',		5,300,1), # overfitting 안되려면 낮은 값
+            "min_sum_hessian_in_leaf":  hp.uniform('min_sum_hessian_in_leaf',       1e-5,1e-1),
             'random_state':             self.random_state,
             'n_jobs':                   -1,
             'metrics':                  'auc',
@@ -123,22 +123,31 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Tune each household...',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--method', default='lgb', choices=['lgb'])
-    parser.add_argument('--max_evals', default=1000, type=int)
-    parser.add_argument('--save_file', default='0118')
+    parser.add_argument('--max_evals', default=100, type=int)
+    parser.add_argument('--save_file', default='0118-3')
     args = parser.parse_args()
 
     # load_dataset
     data_path = 'data/'
-    train_err_arr = np.load(f'{data_path}/train_err_arr.npy')
     train_problem_arr = np.load(f'{data_path}/train_problem_arr.npy')
 
-    WINDOW = 3
-    train_err_list = []
-    for i in range(31 - WINDOW):
-        sum_ = np.sum(train_err_arr[:, i:i + WINDOW, :], axis=1)
-        train_err_list.append(sum_)
-    train_err_r = np.concatenate(
-        [np.min(train_err_list, axis=0), np.max(train_err_list, axis=0), np.mean(train_err_list, axis=0)], axis=1)
+    import pickle
+
+    with open('result/tf_train_1.pkl', 'rb') as f:
+        tf_train_1 = pickle.load(f)
+    with open('result/tf_train_2.pkl', 'rb') as f:
+        tf_train_2 = pickle.load(f)
+    with open('result/tf_train_3.pkl', 'rb') as f:
+        tf_train_3 = pickle.load(f)
+    with open('result/tf_test_1.pkl', 'rb') as f:
+        tf_test_1 = pickle.load(f)
+    with open('result/tf_test_2.pkl', 'rb') as f:
+        tf_test_2 = pickle.load(f)
+    with open('result/tf_test_3.pkl', 'rb') as f:
+        tf_test_3 = pickle.load(f)
+
+    tf_train = pd.concat([tf_train_1, tf_train_2, tf_train_3], axis=0).reset_index(drop=True).values
+
     # y
     train_problem_r = np.max(train_problem_arr, axis=1)
 
@@ -151,7 +160,7 @@ if __name__ == '__main__':
     obj = Tuning_model()
     tuning_algo = tpe.suggest # -- bayesian opt
     # tuning_algo = tpe.rand.suggest # -- random search
-    obj.process(args.method, [train_err_r, train_y],
+    obj.process(args.method, [tf_train, train_y],
                            bayes_trials, tuning_algo, args.max_evals)
 
     # save trial
