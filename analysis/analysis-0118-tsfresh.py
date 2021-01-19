@@ -16,6 +16,8 @@ result_path = 'result_2'
 train_err_arr = np.load(f'{data_path}/train_err_arr.npy')
 train_problem_arr = np.load(f'{data_path}/train_problem_arr.npy')
 test_err_arr = np.load(f'{data_path}/test_err_arr.npy')
+user_model_diff_flag = np.load(f'{data_path}/user_model_diff_flag.npy')
+user_model_diff_flag_test = np.load(f'{data_path}/user_model_diff_flag_test.npy')
 
 #%%
 import pickle
@@ -39,9 +41,12 @@ nan_idx = np.any(pd.isnull(pd.concat([tf_train, tf_test], axis=0)), axis=0)
 tmp = pd.concat([tf_train, tf_test], axis=0)
 
 tf_train = tf_train.loc[:,~nan_idx]
-tf_test = tmp.iloc[15000:].reset_index(drop=True)
+tf_test = tmp.iloc[15000:,:].reset_index(drop=True)
+tf_test = tf_test.loc[:,~nan_idx]
 del tmp
+
 #%%
+
 # params = {
 #     'boosting_type': 'gbdt',
 #     'objective': 'binary',
@@ -50,11 +55,13 @@ del tmp
 #     'verbose': 0,
 # }
 
+train_x = np.append(tf_train.values, user_model_diff_flag.reshape(-1,1), axis=1)
+
 params = load_obj('0118-3')[0]['params']
 
 train_problem_r = np.max(train_problem_arr, axis=1)
 train_y = (train_problem_r > 0).astype(int)
-models, valid_probs = train_model(tf_train.values, train_y, params)
+models, valid_probs = train_model(train_x, train_y, params)
 
 # evaluate
 threshold = 0.5
@@ -69,11 +76,13 @@ print(auc_score)
 #%% test
 submission = pd.read_csv(data_path + '/sample_submission.csv')
 
+test_x = np.append(tf_test.values, user_model_diff_flag_test.reshape(-1,1), axis=1)
+
 # predict
 test_prob = []
 for model in models:
-    test_prob.append(model.predict(tf_test.values))
+    test_prob.append(model.predict(test_x))
 test_prob = np.mean(test_prob, axis=0)
 
 submission['problem'] = test_prob.reshape(-1)
-submission.to_csv("submit/submit_4.csv", index = False)
+submission.to_csv("submit/submit_5.csv", index = False)
