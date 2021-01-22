@@ -18,6 +18,11 @@ train_problem_arr = np.load(f'{data_path}/train_problem_arr.npy')
 test_err_arr = np.load(f'{data_path}/test_err_arr.npy')
 user_model_diff_flag = np.load(f'{data_path}/user_model_diff_flag.npy')
 user_model_diff_flag_test = np.load(f'{data_path}/user_model_diff_flag_test.npy')
+user_model_start = np.load(f'{data_path}/user_model_start.npy')
+user_model_end = np.load(f'{data_path}/user_model_end.npy')
+
+user_model_start_test = np.load(f'{data_path}/user_model_start_test.npy')
+user_model_end_test = np.load(f'{data_path}/user_model_end_test.npy')
 
 #%%
 import pickle
@@ -45,6 +50,17 @@ tf_test = tmp.iloc[15000:,:].reset_index(drop=True)
 tf_test = tf_test.loc[:,~nan_idx]
 del tmp
 
+tf_train.columns = range(tf_train.shape[1])
+tf_train['model_diff'] = user_model_diff_flag
+tf_train['model_start'] = pd.Series(user_model_start, dtype="category")
+tf_train['model_end'] = pd.Series(user_model_end, dtype="category")
+
+tf_test.columns = range(tf_test.shape[1])
+tf_test['model_diff'] = user_model_diff_flag_test
+tf_test['model_start'] = pd.Series(user_model_start_test, dtype="category")
+tf_test['model_end'] = pd.Series(user_model_end_test, dtype="category")
+
+
 #%%
 
 # params = {
@@ -55,13 +71,11 @@ del tmp
 #     'verbose': 0,
 # }
 
-train_x = np.append(tf_train.values, user_model_diff_flag.reshape(-1,1), axis=1)
-
 params = load_obj('0118-3')[0]['params']
 
 train_problem_r = np.max(train_problem_arr, axis=1)
 train_y = (train_problem_r > 0).astype(int)
-models, valid_probs = train_model(train_x, train_y, params)
+models, valid_probs = train_model(tf_train, train_y, params)
 
 # evaluate
 threshold = 0.5
@@ -76,13 +90,11 @@ print(auc_score)
 #%% test
 submission = pd.read_csv(data_path + '/sample_submission.csv')
 
-test_x = np.append(tf_test.values, user_model_diff_flag_test.reshape(-1,1), axis=1)
-
 # predict
 test_prob = []
 for model in models:
-    test_prob.append(model.predict(test_x))
+    test_prob.append(model.predict(tf_test))
 test_prob = np.mean(test_prob, axis=0)
 
 submission['problem'] = test_prob.reshape(-1)
-submission.to_csv("submit/submit_5.csv", index = False)
+submission.to_csv("submit/submit_6.csv", index = False)
