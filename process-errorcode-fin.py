@@ -15,7 +15,6 @@ from tsfresh.utilities.distribution import MultiprocessingDistributor
 
 data_path = 'data/'
 data_save_path = 'data_use/'
-result_path = 'result_2'
 
 TRAIN_ID_LIST = list(range(10000, 25000))
 TEST_ID_LIST = list(range(30000, 45000-1))
@@ -404,54 +403,40 @@ def feature_extraction(manually = True):
     1. Extract error type
     2. Extract model_nm
     '''
-    import pickle
-    # FIXME : 데이터 불러오는부분 빼고 extract_err_library 함수로 만들어야 함
-    with open(f'{result_path}/tf_train_1.pkl', 'rb') as f:
-        tf_train_1 = pickle.load(f)
-    with open(f'{result_path}/tf_train_2.pkl', 'rb') as f:
-        tf_train_2 = pickle.load(f)
-    with open(f'{result_path}/tf_train_3.pkl', 'rb') as f:
-        tf_train_3 = pickle.load(f)
-    with open(f'{result_path}/tf_test_1.pkl', 'rb') as f:
-        tf_test_1 = pickle.load(f)
-    with open(f'{result_path}/tf_test_2.pkl', 'rb') as f:
-        tf_test_2 = pickle.load(f)
-    with open(f'{result_path}/tf_test_3.pkl', 'rb') as f:
-        tf_test_3 = pickle.load(f)
 
-    tf_train = pd.concat([tf_train_1, tf_train_2, tf_train_3], axis=0).reset_index(drop=True)
-    tf_test = pd.concat([tf_test_1, tf_test_2, tf_test_3], axis=0).reset_index(drop=True)
-    nan_idx = np.any(pd.isnull(pd.concat([tf_train, tf_test], axis=0)), axis=0)
-    tmp = pd.concat([tf_train, tf_test], axis=0)
-    tf_train = tf_train.loc[:,~nan_idx]
-    tf_test = tmp.iloc[N_USER_TRAIN:,:].reset_index(drop=True)
-    tf_test = tf_test.loc[:,~nan_idx]
-
-    #### train
+    ### 0. load dataset
     train_err_arr = np.load(f'{data_save_path}train_err_code.npy')
-    train_err_df = extract_err_manually(train_err_arr)
-    # train_err_df = extract_err_library(train_err_arr)
-    train_err_df = pd.concat([tf_train, train_err_df], axis=1)
+    test_err_arr = np.load(f'{data_save_path}test_err_code.npy')
 
+    ### 1. library or manually for error code and type
+    if manually:
+        train_err_df = extract_err_manually(train_err_arr)
+        test_err_df = extract_err_manually(test_err_arr)
+    else:
+        train_err_df = extract_err_library(train_err_arr)
+        test_err_df = extract_err_library(test_err_arr)
+        nan_idx = np.any(pd.isnull(pd.concat([train_err_df, test_err_df], axis=0)), axis=0)
+        tmp = pd.concat([train_err_df, test_err_df], axis=0)
+        train_err_df = train_err_df.loc[:, ~nan_idx]
+        test_err_df = tmp.iloc[N_USER_TRAIN:, :].reset_index(drop=True)
+        test_err_df = test_err_df.loc[:, ~nan_idx]
+
+    ### 2. model_nm
     train_models = np.load(f'{data_save_path}train_models.npy')
     train_model_df = extract_model_nm(train_models, TRAIN_ID_LIST)
-
-    # concatenate features
-    train_data = pd.concat([train_err_df, train_model_df], axis=1)
-    train_data.columns = range(train_data.shape[1])
-
-    #### test
-    test_err_arr = np.load(f'{data_save_path}test_err_code.npy')
-    test_err_df = extract_err_manually(test_err_arr)
-    # test_err_df = extract_err_library(test_err_arr)
-    test_err_df = pd.concat([tf_test, test_err_df], axis=1)
-
     test_models = np.load(f'{data_save_path}test_models.npy')
     test_model_df = extract_model_nm(test_models, TEST_ID_LIST)
 
-    # concatenate features
+    ### 3. concatenate features
+    train_data = pd.concat([train_err_df, train_model_df], axis=1)
     test_data = pd.concat([test_err_df, test_model_df], axis=1)
 
+    ### 4. save
+    train_data.to_csv(f'{data_save_path}train_data.csv')
+    test_data.to_csv(f'{data_save_path}test_data.csv')
+
+    ### 5. change column names
+    train_data.columns = range(train_data.shape[1])
     test_data.columns = range(test_data.shape[1])
 
     return train_data, test_data
@@ -578,5 +563,5 @@ if __name__ == '__main__':
     test_prob = np.mean(test_prob, axis=0)
 
     submission['problem'] = test_prob.reshape(-1)
-    submission.to_csv("submit/submit_10.csv", index=False)
+    submission.to_csv("submission.csv", index=False)
     print('Process 7 Done')
