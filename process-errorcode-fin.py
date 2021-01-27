@@ -15,7 +15,7 @@ from tsfresh.utilities.distribution import MultiprocessingDistributor
 
 data_path = 'data/'
 data_save_path = 'data_use/'
-result_path = 'result_3'
+result_path = 'result_2'
 
 TRAIN_ID_LIST = list(range(10000, 25000))
 TEST_ID_LIST = list(range(30000, 45000-1))
@@ -451,6 +451,7 @@ def feature_extraction(manually = True):
 
     # concatenate features
     test_data = pd.concat([test_err_df, test_model_df], axis=1)
+
     test_data.columns = range(test_data.shape[1])
 
     return train_data, test_data
@@ -577,5 +578,5 @@ if __name__ == '__main__':
     test_prob = np.mean(test_prob, axis=0)
 
     submission['problem'] = test_prob.reshape(-1)
-    submission.to_csv("submit/submit_8.csv", index=False)
+    submission.to_csv("submit/submit_10.csv", index=False)
     print('Process 7 Done')
