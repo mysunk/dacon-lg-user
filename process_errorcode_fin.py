@@ -9,12 +9,20 @@ from tqdm import tqdm
 from sklearn.metrics import *
 from sklearn.model_selection import KFold
 import lightgbm as lgb
-from tsfresh import extract_features
+from tsfresh import extract_features, select_features
 from tsfresh.feature_extraction.settings import EfficientFCParameters
 from tsfresh.utilities.distribution import MultiprocessingDistributor
+import os
 
 data_path = 'data/'
 data_save_path = 'data_use/'
+param_save_path = 'params/'
+
+if not os.path.isdir(data_save_path):
+    os.mkdir(data_save_path)
+
+if not os.path.isdir(param_save_path):
+    os.mkdir(param_save_path)
 
 TRAIN_ID_LIST = list(range(10000, 25000))
 TEST_ID_LIST = list(range(30000, 45000-1))
@@ -47,34 +55,40 @@ def process_errcode(user_id, err_df):
 
 
 def process_errordata_in_day():
+    '''
+    load raw error_data and transfrom it to day by day dataframe
+    '''
     # train
-    with Pool(NUM_CPU) as p:
-        train_err_df = pd.read_csv(data_path + 'train_err_data.csv')
-        train_err_df.drop_duplicates(inplace=True)
-        train_err_df = train_err_df.reset_index(drop=True)
-        train_err_df['time'] = pd.to_datetime(train_err_df['time'], format='%Y%m%d%H%M%S')
-        process_errcode_train = partial(process_errcode, err_df=train_err_df)
-        err_type_code_train = p.map(process_errcode_train, TRAIN_ID_LIST)
-        del train_err_df
-        # save FIXME: 제출시 save가 아니고 바로 사용하도록 바꿔야 함
-        with open(f'{data_save_path}err_type_code_train.pkl', 'wb') as f:
-            pickle.dump(err_type_code_train, f)
-        del err_type_code_train
+    train_err_df = pd.read_csv(data_path + 'train_err_data.csv')
+    train_err_df.drop_duplicates(inplace=True)
+    train_err_df = train_err_df.reset_index(drop=True)
+    train_err_df['time'] = pd.to_datetime(train_err_df['time'], format='%Y%m%d%H%M%S')
+
+    err_type_code_train = []
+    for user_id in TRAIN_ID_LIST:
+        err_type_code_train.append(process_errcode(user_id, err_df= train_err_df))
+    del train_err_df
+
+    # save FIXME: 제출시 save가 아니고 바로 사용하도록 바꿔야 함
+    with open(f'{data_save_path}err_type_code_train.pkl', 'wb') as f:
+        pickle.dump(err_type_code_train, f)
+    del err_type_code_train
 
     # test
-    with Pool(NUM_CPU) as p:
-        ## test
-        test_err_df = pd.read_csv(data_path + 'test_err_data.csv')
-        test_err_df.drop_duplicates(inplace=True)
-        test_err_df = test_err_df.reset_index(drop=True)
-        test_err_df['time'] = pd.to_datetime(test_err_df['time'], format='%Y%m%d%H%M%S')
-        process_errcode_test = partial(process_errcode, err_df=test_err_df)
-        err_type_code_test = p.map(process_errcode_test, TEST_ID_LIST)
-        del test_err_df
-        # save
-        with open(f'{data_save_path}err_type_code_test.pkl', 'wb') as f:
-            pickle.dump(err_type_code_test, f)
-        del err_type_code_test
+    test_err_df = pd.read_csv(data_path + 'test_err_data.csv')
+    test_err_df.drop_duplicates(inplace=True)
+    test_err_df = test_err_df.reset_index(drop=True)
+    test_err_df['time'] = pd.to_datetime(test_err_df['time'], format='%Y%m%d%H%M%S')
+
+    err_type_code_test = []
+    for user_id in TEST_ID_LIST:
+        err_type_code_test.append(process_errcode(user_id, err_df=test_err_df))
+    del test_err_df
+
+    # save
+    with open(f'{data_save_path}err_type_code_test.pkl', 'wb') as f:
+        pickle.dump(err_type_code_test, f)
+    del err_type_code_test
 
 
 def processing_errcode(errortype, errorcode):
@@ -257,7 +271,8 @@ def transform_errtype(data):
         if v.size == 0:
             continue
         err_type[day - 1][v] += c
-    return err_code, err_type
+    err = np.concatenate([err_code, err_type], axis=1)
+    return err
 
 
 def transform_model_nm(data):
@@ -283,17 +298,14 @@ def transform_error_data():
 
     # error type과 code를 조합한 것으로 transform
     data_list = [err_type_code_train[user_idx] for user_idx in range(N_USER_TRAIN)]
-    with Pool(NUM_CPU) as p:
-        train_err_code_list, train_err_type_list = p.map(transform_errtype, data_list)
-        model_list = p.map(transform_model_nm, data_list)
+    train_err_list, model_list = [], []
+    for data in data_list:
+        train_err_list.append(transform_errtype(data))
+        model_list.append(transform_model_nm(data))
 
     # list to array
-    train_err_code = np.array(train_err_code_list)
-    train_err_type = np.array(train_err_type_list)
+    train_err_code = np.array(train_err_list)
     train_models = np.array(model_list)
-
-    # concatenate
-    train_err_code = np.append(train_err_code, train_err_type, axis = 2)
 
     # save
     np.save(f'{data_save_path}train_err_code.npy', train_err_code)
@@ -306,17 +318,16 @@ def transform_error_data():
     # error code 관련
     # error type과 code를 조합한 것으로 transform
     data_list = [err_type_code_test[user_idx] for user_idx in range(N_USER_TEST)]
-    with Pool(NUM_CPU) as p:
-        test_err_code_list, test_err_type_list = p.map(transform_errtype, data_list)
-        model_list = p.map(transform_model_nm, data_list)
+    test_err_list, model_list = [], []
+    for data in data_list:
+        test_err_list.append(transform_errtype(data))
+        model_list.append(transform_model_nm(data))
 
     # list to array
-    test_err_code = np.array(test_err_code_list)
-    test_err_type = np.array(test_err_type_list)
+    test_err_code = np.array(test_err_list)
     test_models = np.array(model_list)
 
-    # concatenate and save
-    test_err_code = np.append(test_err_code, test_err_type, axis=2)
+    # save
     np.save(f'{data_save_path}test_err_code.npy', test_err_code)
     np.save(f'{data_save_path}test_models.npy', test_models)
 
@@ -335,7 +346,7 @@ def extract_err_manually(data, WINDOW = 3): # 임시로는 mean 등이고library
     return err_df
 
 
-def extract_err_library(data, WINDOW = 3): # 임시로는 mean 등이고library 활용할 것
+def extract_err_library(data, WINDOW = 3):
     err_list = []
     for i in range(31 - WINDOW):
         sum_ = np.sum(data[:, i:i + WINDOW, :], axis=1)
@@ -348,12 +359,13 @@ def extract_err_library(data, WINDOW = 3): # 임시로는 mean 등이고library 
     df_list = pd.DataFrame(np.concatenate(df_list, axis=0), columns=['id'] + list(range(N_ERRTYPE + N_NEW_ERRTYPE)))
     df_list['id'] = df_list['id'].astype(int)
 
-    CPU_CORE = multiprocessing.cpu_count()
-
-    Distributor = MultiprocessingDistributor(n_workers=CPU_CORE, disable_progressbar=False,
-                                             progressbar_title='Feature extraction', show_warnings=False)
-    tf_data = extract_features(df_list, column_id='id', distributor=Distributor,
+    tf_data = []
+    for i in range(N_ERRTYPE + N_NEW_ERRTYPE):
+        df_list_sub = df_list.loc[:,['id',i]]
+        tf_data_sub = extract_features(df_list_sub, column_id='id',
                                 default_fc_parameters=EfficientFCParameters())
+        tf_data.append(tf_data_sub)
+    tf_data = pd.concat(tf_data, axis=1)
     return tf_data
 
 
@@ -398,21 +410,23 @@ def extract_model_nm(data, id_list):
     return model_df
 
 
-def feature_extraction(manually = True):
+def feature_extraction(option = 1):
     '''
     1. Extract error type
     2. Extract model_nm
+    *option
+    1: manually, 2: extract from library, 3. load saved data extracted from library
     '''
 
     ### 0. load dataset
     train_err_arr = np.load(f'{data_save_path}train_err_code.npy')
     test_err_arr = np.load(f'{data_save_path}test_err_code.npy')
 
-    ### 1. library or manually for error code and type
-    if manually:
+    ### 1. extract features based on option
+    if option == 1:
         train_err_df = extract_err_manually(train_err_arr)
         test_err_df = extract_err_manually(test_err_arr)
-    else:
+    elif option == 2:
         train_err_df = extract_err_library(train_err_arr)
         test_err_df = extract_err_library(test_err_arr)
         nan_idx = np.any(pd.isnull(pd.concat([train_err_df, test_err_df], axis=0)), axis=0)
@@ -420,8 +434,19 @@ def feature_extraction(manually = True):
         train_err_df = train_err_df.loc[:, ~nan_idx]
         test_err_df = tmp.iloc[N_USER_TRAIN:, :].reset_index(drop=True)
         test_err_df = test_err_df.loc[:, ~nan_idx]
+        # feature selection
+        train_prob = pd.read_csv(data_path + 'train_problem_data.csv')
+        train_y = np.zeros((N_USER_TRAIN))
+        train_y[train_prob.user_id.unique() - 10000] = 1
+        train_err_df = select_features(train_err_df, train_y)
+        test_err_df = test_err_df.loc[:,train_err_df.columns]
+        train_err_df.to_csv(f'{data_save_path}train_err_df_library.csv')
+        test_err_df.to_csv(f'{data_save_path}test_err_df_library.csv')
+    if option == 3:
+        train_err_df = pd.read_csv(f'{data_save_path}train_err_df_library.csv')
+        test_err_df = pd.read_csv(f'{data_save_path}test_err_df_library.csv')
 
-    ### 2. model_nm
+    ### 2. extract features from model_nm
     train_models = np.load(f'{data_save_path}train_models.npy')
     train_model_df = extract_model_nm(train_models, TRAIN_ID_LIST)
     test_models = np.load(f'{data_save_path}test_models.npy')
@@ -430,10 +455,6 @@ def feature_extraction(manually = True):
     ### 3. concatenate features
     train_data = pd.concat([train_err_df, train_model_df], axis=1)
     test_data = pd.concat([test_err_df, test_model_df], axis=1)
-
-    ### 4. save
-    train_data.to_csv(f'{data_save_path}train_data.csv')
-    test_data.to_csv(f'{data_save_path}test_data.csv')
 
     ### 5. change column names
     train_data.columns = range(train_data.shape[1])
@@ -483,7 +504,7 @@ def train_model(train_x, train_y, params):
             valid_sets=d_val,
             feval=f_pr_auc,
             early_stopping_rounds=100,
-            verbose_eval=True,
+            verbose_eval=False,
         )
 
         # cal valid prediction
@@ -493,6 +514,69 @@ def train_model(train_x, train_y, params):
         models.append(model)
 
     return models, valid_probs
+
+
+def make_param_int(param, key_names):
+    for key, value in param.items():
+        if key in key_names:
+            param[key] = int(param[key])
+    return param
+
+
+class Bayes_tune_model(object):
+
+    def __init__(self):
+        self.random_state = 0
+        self.space = {}
+
+    # parameter setting
+    def lgb_space(self):
+        # LightGBM parameters
+        self.space = {
+            'objective':                'binary',
+            'min_child_weight':         hp.quniform('min_child_weight', 1, 10, 1),
+            'learning_rate':            hp.uniform('learning_rate',    0.0001, 0.2),
+            'max_depth':                -1,
+            'num_leaves':               hp.quniform('num_leaves',       5, 200, 1),
+            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 200, 1),	# overfitting 안되려면 높은 값
+            'reg_alpha':                hp.uniform('reg_alpha',0, 1),
+            'reg_lambda':               hp.uniform('reg_lambda',0, 1),
+            'colsample_bytree':         hp.uniform('colsample_bytree', 0.01, 1.0),
+            'colsample_bynode':		    hp.uniform('colsample_bynode',0.01,1.0),
+            'bagging_freq':			    hp.quniform('bagging_freq',	0,20,1),
+            'tree_learner':			    hp.choice('tree_learner',	['serial','feature','data','voting']),
+            'subsample':                hp.uniform('subsample', 0.01, 1.0),
+            'boosting':			        hp.choice('boosting', ['gbdt']),
+            'max_bin':			        hp.quniform('max_bin',		5,300,1), # overfitting 안되려면 낮은 값
+            "min_sum_hessian_in_leaf":  hp.uniform('min_sum_hessian_in_leaf',       1e-5,1e-1),
+            'random_state':             self.random_state,
+            'n_jobs':                   -1,
+            'metrics':                  'auc',
+            'verbose':                  -1,
+        }
+
+    # optimize
+    def process(self, clf_name, train_set, trials, algo, max_evals):
+        fn = getattr(self, clf_name+'_cv')
+        space = getattr(self, clf_name+'_space')
+        space()
+        fmin_objective = partial(fn, train_set=train_set)
+        try:
+            result = fmin(fn=fmin_objective, space=self.space, algo=algo, max_evals=max_evals, trials=trials)
+        except Exception as e:
+            return {'status': STATUS_FAIL,
+                    'exception': str(e)}
+        return result, trials
+
+    def lgb_cv(self, params, train_set):
+        params = make_param_int(params, ['max_depth','num_leaves','min_data_in_leaf',
+                                     'min_child_weight','bagging_freq','max_bin'])
+
+        train_x, train_y = train_set
+        _, valid_probs = train_model(train_x, train_y, params)
+        best_loss = roc_auc_score(train_y, valid_probs)
+        # Dictionary with information for evaluation
+        return {'loss': -best_loss, 'params': params, 'status': STATUS_OK}
 
 
 #%% main문
@@ -521,9 +605,13 @@ if __name__ == '__main__':
 
     '''
     4. 일별 데이터에서 피쳐를 추출하여 학습에 적합한 데이터로 변경 
+    *option 
+    1: manually
+    2: extract from library
+    3. load saved data extracted from library
     '''
     # from error data
-    train_X, test_X = feature_extraction(manually = False)
+    train_X, test_X = feature_extraction(option = 1)
     print('Process 4 Done')
 
     '''
@@ -535,10 +623,35 @@ if __name__ == '__main__':
     print('Process 5 Done')
 
     '''
-    6. fit
+    6. parameter tuning
     '''
-    from util import load_obj
-    params = load_obj('0118-3')[0]['params']
+    MAX_EVALS = 1 # num iteration
+
+    from hyperopt import hp, tpe, fmin, Trials, STATUS_OK, STATUS_FAIL
+    bayes_trials = Trials()
+    obj = Bayes_tune_model()
+    tuning_algo = tpe.suggest  # -- bayesian opt
+    # tuning_algo = tpe.rand.suggest # -- random search
+    obj.process('lgb', [train_X, train_y],
+                bayes_trials, tuning_algo, MAX_EVALS)
+
+    # save the best param
+    best_param = sorted(bayes_trials.results, key=lambda k: k['loss'])[0]['params']
+    with open(f'{param_save_path}tuning_result_1.pkl', 'wb') as f:
+        pickle.dump(best_param, f, pickle.HIGHEST_PROTOCOL)
+    print('Process 6 Done')
+
+    '''
+    7. fit
+    '''
+    # params = {
+    #     'boosting_type': 'gbdt',
+    #     'objective': 'binary',
+    #     'metric': 'auc',
+    #     'seed': 1015,
+    #     'verbose': 0,
+    # }
+    params = best_param
     models, valid_probs = train_model(train_X, train_y, params)
 
     # evaluate
@@ -548,11 +661,11 @@ if __name__ == '__main__':
     precision = precision_score(train_y, valid_preds)
     auc_score = roc_auc_score(train_y, valid_probs)
      # validation score
-    print('Process 6 Done')
+    print('Process 7 Done')
     print('Validation score is {:.5f}'.format(auc_score))
 
     '''
-    7. predict
+    8. predict
     '''
     submission = pd.read_csv(data_path + '/sample_submission.csv')
 
@@ -564,4 +677,4 @@ if __name__ == '__main__':
 
     submission['problem'] = test_prob.reshape(-1)
     submission.to_csv("submission.csv", index=False)
-    print('Process 7 Done')
+    print('Process 8 Done')
