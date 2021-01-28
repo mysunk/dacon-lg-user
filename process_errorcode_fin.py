@@ -11,7 +11,7 @@ from sklearn.model_selection import KFold
 import lightgbm as lgb
 from tsfresh import extract_features, select_features
 from tsfresh.feature_extraction.settings import EfficientFCParameters
-from tsfresh.utilities.distribution import MultiprocessingDistributor
+from hyperopt import hp, tpe, fmin, Trials, STATUS_OK, STATUS_FAIL
 import os
 
 data_path = 'data/'
@@ -30,6 +30,7 @@ NUM_CPU = multiprocessing.cpu_count()
 N_USER_TRAIN = len(TRAIN_ID_LIST)
 N_USER_TEST = len(TEST_ID_LIST)
 N_ERRTYPE = 42
+
 
 #%% 필요 함수 정의
 def process_errcode(user_id, err_df):
@@ -97,118 +98,17 @@ def processing_errcode(errortype, errorcode):
     '''
     new_errtype = errortype.copy().astype(str)
     for e in range(1, 43):
-        # print(f'>>> Processing for error {e} is started...')
         idx = errortype == e
 
         # 값이 없을 경우
         if idx.sum() == 0:
-            # print(f'<<< Processing for error {e} is done...')
             continue
 
         # 값이 있을 경우
         errcode = errorcode[idx]
-        if e == 1:
-            for i, ec in enumerate(errcode):
-                if ec == '0':
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
-                elif ec[0] == 'P':
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'P'
-                else:
-                    print('Unknown error code for error type 1')
-                    return -1
-        elif e in [2, 4, 31, 37, 39, 40]:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 3:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 30:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 5:
-            for i, ec in enumerate(errcode):
-                if ec[0] in ['Y', 'V', 'U', 'S', 'Q', 'P', 'M', 'J', 'H', 'E', 'D', 'C', 'B']:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec[0]
-                elif ec in ['nan', 'http']:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
-                else:
-                    try:
-                        int(ec)
-                        new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
-                    except:
-                        print('Unknown error code for error type 5: It should be int')
-                        new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
-        elif e in [6, 7]:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 8:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 9:
-            for i, ec in enumerate(errcode):
-                if ec == '1':
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec # 1인 경우
-                elif ec[0] in ['C', 'V']:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec[0]
-                else:
-                    print('Unknown error code for error type 9')
-                    return -1
-        elif e in [10, 11, 12, 13, 15, 16, 18, 19, 20, 21, 22, 24, 26, 27, 28, 35]:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 14:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 17:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 23:
-            for i, ec in enumerate(errcode):
-                if 'UNKNOWN' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
-                elif 'fail' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'fail'
-                elif 'timeout' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'timeout'
-                elif 'active' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'active'
-                elif 'standby' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'standby'
-                elif 'terminate' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'terminate'
-                else:
-                    print('Unknown error code for error type 23')
-                    return -1
-        elif e == 25:
-            for i, ec in enumerate(errcode):
-                if 'UNKNOWN' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
-                elif 'fail' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'fail'
-                elif 'timeout' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'timeout'
-                elif 'cancel' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'cancel'
-                elif 'terminate' in ec:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'terminate'
-                else:
-                    try:
-                        int(ec)
-                        new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
-                    except:
-                        print('Unknown error code for error type 25: It should be int')
-                        print(ec)
-                        return -1
-        elif e == 32:
-            new_errtype[idx] = str(e) + '-num'
-        elif e == 33:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 34:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 36:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 38:
-            new_errtype[idx] = str(e) + '-num'
-        elif e == 41:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        elif e == 42:
-            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
-        else:
-            print('Unknown error type')
-            return -1
-        # print(f'<<< Processing for error {e} is done...')
+
+        new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
+
     return new_errtype # 정상적인 return
 
 
@@ -286,11 +186,27 @@ def transform_model_nm(data):
     return model_nm
 
 
+def transform_fwver(data):
+    fwver = np.zeros((30, 3), dtype=int)  # 00. 00. 00로 분류
+    fwver = fwver.astype(str)
+
+    for day in range(1, 31):
+        if data == {}:
+            print('Unknown user, skip it')
+            break
+        for fwver_u in np.unique(data[day]['fwver']):
+            striped_fwver = fwver_u.split('.')
+            for i in range(len(striped_fwver)):
+                fwver[day - 1, i] = striped_fwver[i]
+    return fwver
+
+
 def transform_error_data():
     '''
     dataframe에서 array로 변경
     1. error type and code
     2. model_nm
+    3. fwver
     '''
     #### train
     with open(f'{data_save_path}err_type_code_train.pkl', 'rb') as f:
@@ -298,18 +214,22 @@ def transform_error_data():
 
     # error type과 code를 조합한 것으로 transform
     data_list = [err_type_code_train[user_idx] for user_idx in range(N_USER_TRAIN)]
-    train_err_list, model_list = [], []
-    for data in data_list:
+    train_err_list, model_list, fwver_list = [], [], []
+    for data in tqdm(data_list):
         train_err_list.append(transform_errtype(data))
-        model_list.append(transform_model_nm(data))
+    #     model_list.append(transform_model_nm(data))
+    #     fwver_list.append(transform_fwver(data))
+
 
     # list to array
     train_err_code = np.array(train_err_list)
-    train_models = np.array(model_list)
+    # train_models = np.array(model_list)
+    # train_fwvers = np.array(fwver_list)
 
     # save
     np.save(f'{data_save_path}train_err_code.npy', train_err_code)
-    np.save(f'{data_save_path}train_models.npy', train_models)
+    # np.save(f'{data_save_path}train_models.npy', train_models)
+    # np.save(f'{data_save_path}train_fwvers.npy', train_fwvers)
 
     #### test
     with open(f'{data_save_path}err_type_code_test.pkl', 'rb') as f:
@@ -318,20 +238,65 @@ def transform_error_data():
     # error code 관련
     # error type과 code를 조합한 것으로 transform
     data_list = [err_type_code_test[user_idx] for user_idx in range(N_USER_TEST)]
-    test_err_list, model_list = [], []
-    for data in data_list:
+    test_err_list, model_list, fwver_list = [], [], []
+    for data in tqdm(data_list):
         test_err_list.append(transform_errtype(data))
-        model_list.append(transform_model_nm(data))
+    #     model_list.append(transform_model_nm(data))
+    #     fwver_list.append(transform_fwver(data))
 
     # list to array
     test_err_code = np.array(test_err_list)
-    test_models = np.array(model_list)
+    # test_models = np.array(model_list)
+    # test_fwvers = np.array(fwver_list)
 
     # save
     np.save(f'{data_save_path}test_err_code.npy', test_err_code)
-    np.save(f'{data_save_path}test_models.npy', test_models)
+    # np.save(f'{data_save_path}test_models.npy', test_models)
+    # np.save(f'{data_save_path}test_fwvers.npy', test_fwvers)
 
     # FIXME: save 말고 바로 return으로 바꿔야 함
+
+from tsfresh.feature_extraction.feature_calculators \
+    import fft_aggregated, fft_coefficient, agg_linear_trend, number_crossing_m, skewness, fourier_entropy, cwt_coefficients, cid_ce, \
+        symmetry_looking
+
+def tsfresh_manually(train_err_r):
+    def func1(func, data, list_):
+        f1 = list(func(data, list_))
+        f1 = pd.DataFrame(f1)
+        f1 = pd.DataFrame(columns=f1[0], data=f1[1].values.reshape(1, -1))
+        return f1
+    data = []
+    for i in tqdm(range(train_err_r.shape[0])):
+        tmp = []
+        for j in range(N_ERRTYPE + N_NEW_ERRTYPE):
+            f1 = func1(fft_aggregated, train_err_r[i, :, j],
+                       [{'aggtype': 'centroid'}, {'aggtype': 'variance'}, {'aggtype': 'skew'}, {'aggtype': 'kurtosis'}])
+            f2 = func1(fft_coefficient, train_err_r[i, :, j],
+                       [{'coeff': 1, 'attr': 'real'}, {'coeff': 1, 'attr': 'imag'}, {'coeff': 1, 'attr': 'abs'},
+                        {'coeff': 1, 'attr': 'angle'}])
+            f3 = func1(agg_linear_trend, train_err_r[i, :, j], [{'attr': 'stderr', 'chunk_len': 10, 'f_agg': 'var'},
+                                                                {'attr': 'stderr', 'chunk_len': 5, 'f_agg': 'mean'},
+                                                                {'attr': 'stderr', 'chunk_len': 10, 'f_agg': 'max'}])
+            f4 = func1(symmetry_looking, train_err_r[i, :, j], [{'r': 0.35}])
+
+            # t1 = number_crossing_m(train_err_r[i, :, j], 0)
+            # t2 = skewness(train_err_r[i, :, j])
+            # t3 = fourier_entropy(train_err_r[i, :, j], 1)
+            # t4 = cid_ce(train_err_r[i, :, j], True)
+            # t_nu = pd.DataFrame(data=np.array([t1, t2, t3, t4]).reshape(1, -1),
+            #                     columns=['number_crossing_m', 'skewness', 'fourier_entropy', 'cid_ce'])
+
+            # feature_for_one_user = pd.concat([f1, f2, f3, f4, t_nu], axis=1)
+            feature_for_one_user = pd.concat([f1, f2, f3, f4], axis=1)
+            feature_for_one_user.columns = [str(j) + '_' + c for c in feature_for_one_user.columns]
+            tmp.append(feature_for_one_user)
+
+        tmp = pd.concat(tmp, axis=1)
+        data.append(tmp)
+
+    features = pd.concat(data, axis=0).reset_index(drop=True)
+    return features
 
 
 def extract_err_manually(data, WINDOW = 3): # 임시로는 mean 등이고library 활용할 것
@@ -339,6 +304,10 @@ def extract_err_manually(data, WINDOW = 3): # 임시로는 mean 등이고library
     for i in range(31 - WINDOW):
         sum_ = np.sum(data[:, i:i + WINDOW, :], axis=1)
         err_list.append(sum_)
+    # tsfresh
+    # err_r_raw = np.array(err_list).transpose(1,0,2)
+    # tsfresh_features = tsfresh_manually(err_r_raw)
+    # manually
     err_r = np.concatenate(
         [np.min(err_list, axis=0), np.max(err_list, axis=0), np.mean(err_list, axis=0),
          np.median(err_list, axis=0)], axis=1)
@@ -370,10 +339,12 @@ def extract_err_library(data, WINDOW = 3):
 
 
 def extract_model_nm(data, id_list):
+    model_sorted_order = np.array([4, 1, 0, 2, 8, 5, 3, 7, 6]) + 1
     # model_diff flag
     model_diff = np.zeros((len(id_list)), dtype=int)
+
     for i in range(len(id_list)):
-        model_diff[i] = (data[i].sum(axis=0) > 0).sum() > 1
+        model_diff[i] = (data[i].sum(axis=0) > 0).sum()
     # model_start flag
     model_start = np.zeros((len(id_list)), dtype=int)
     for i in range(len(id_list)):
@@ -403,11 +374,68 @@ def extract_model_nm(data, id_list):
     for i in range(len(id_list)):
         model_exist[i, :] = data[i].sum(axis=0) > 0
 
+    # model upgrade
+    model_upgrade = np.zeros((len(id_list)), dtype=int)
+    model_downgrade = np.zeros((len(id_list)), dtype=int)
+    for i in range(len(id_list)):
+        if model_start[i] == 0 or model_end[i] == 0: # unknown user
+            continue
+        idx1 = np.where(model_start[i] == model_sorted_order)[0][0]
+        idx2 = np.where(model_end[i] == model_sorted_order)[0][0]
+        if idx1 == idx2:
+            pass
+        elif idx1 < idx2:
+            model_upgrade[i] = 1
+        else:
+            model_downgrade[i] = -1
+
     model_df = pd.DataFrame(data = model_exist)
     model_df['model_diff'] = model_diff
     model_df['model_start'] = pd.Series(model_start, dtype='category')
     model_df['model_end'] = pd.Series(model_end, dtype='category')
+    model_df['model_upgrade'] = model_upgrade
+    model_df['model_downgrade'] = model_downgrade
     return model_df
+
+
+def extract_fwver(data, id_list):
+    data = data.astype(int)
+     # model diff
+    fwver_diff = np.zeros((len(id_list), 3), dtype=int)
+    fwver_start = np.zeros((len(id_list), 3), dtype=int)
+    fwver_end = np.zeros((len(id_list), 3), dtype=int)
+    fwver_upgrade = np.zeros((len(id_list), 3), dtype=int)
+    fwver_downgrade = np.zeros((len(id_list), 3), dtype=int)
+
+    for i in range(len(id_list)):
+        for j in range(3):
+            data_sub = data[i][:,j]
+            data_sub = data_sub[data_sub != 0]
+            # diff
+            fwver_diff[i, j] = np.max([len(np.unique(data_sub)) - 1, 0])
+            occur_idx = np.where(data_sub)[0]
+            if occur_idx.size == 0:
+                continue
+            first_occur_idx = occur_idx[0]
+            fwver_class_start = data_sub[first_occur_idx]
+            fwver_start[i, j] = fwver_class_start
+
+            last_occur_idx = occur_idx[-1]
+            fwver_class_end = data_sub[last_occur_idx]
+            fwver_end[i, j] = fwver_class_end
+
+            fwver_upgrade[i,j] = fwver_class_start < fwver_class_end
+            fwver_downgrade[i,j] = (fwver_class_start > fwver_class_end) * -1
+
+    fwver_df = pd.DataFrame()
+    for j in range(3):
+        fwver_df['fwver_diff_'+str(j)] = fwver_diff[:,j]
+        fwver_df['fwver_start_' + str(j)] = pd.Series(fwver_start[:, j])
+        fwver_df['fwver_end_' + str(j)] = pd.Series(fwver_end[:, j])
+        fwver_df['fwver_upgrade_' + str(j)] = pd.Series(fwver_upgrade[:, j])
+        fwver_df['fwver_downgrade_' + str(j)] = pd.Series(fwver_downgrade[:, j])
+        break
+    return fwver_df
 
 
 def feature_extraction(option = 1):
@@ -419,13 +447,14 @@ def feature_extraction(option = 1):
     '''
 
     ### 0. load dataset
-    train_err_arr = np.load(f'{data_save_path}train_err_code.npy')
-    test_err_arr = np.load(f'{data_save_path}test_err_code.npy')
+    if option != 3:
+        train_err_arr = np.load(f'{data_save_path}train_err_code.npy')
+        test_err_arr = np.load(f'{data_save_path}test_err_code.npy')
 
     ### 1. extract features based on option
     if option == 1:
-        train_err_df = extract_err_manually(train_err_arr)
-        test_err_df = extract_err_manually(test_err_arr)
+        train_err_df = extract_err_manually(train_err_arr, WINDOW = 3)
+        test_err_df = extract_err_manually(test_err_arr, WINDOW = 3)
     elif option == 2:
         train_err_df = extract_err_library(train_err_arr)
         test_err_df = extract_err_library(test_err_arr)
@@ -452,13 +481,19 @@ def feature_extraction(option = 1):
     test_models = np.load(f'{data_save_path}test_models.npy')
     test_model_df = extract_model_nm(test_models, TEST_ID_LIST)
 
-    ### 3. concatenate features
-    train_data = pd.concat([train_err_df, train_model_df], axis=1)
-    test_data = pd.concat([test_err_df, test_model_df], axis=1)
+    ### 3. extract features from model_nm
+    train_fwvers = np.load(f'{data_save_path}train_fwvers.npy')
+    train_fwver_df = extract_fwver(train_fwvers, TRAIN_ID_LIST)
+    test_fwvers = np.load(f'{data_save_path}test_fwvers.npy')
+    test_fwver_df = extract_fwver(test_fwvers, TEST_ID_LIST)
 
-    ### 5. change column names
-    train_data.columns = range(train_data.shape[1])
-    test_data.columns = range(test_data.shape[1])
+    ### 4. concatenate features
+    train_data = pd.concat([train_err_df, train_model_df, train_fwver_df], axis=1)
+    test_data = pd.concat([test_err_df, test_model_df, test_fwver_df], axis=1)
+    # train_data = pd.concat([train_err_df, train_model_df], axis=1)
+    # test_data = pd.concat([test_err_df, test_model_df], axis=1)
+    # train_data = train_err_df
+    # test_data = test_err_df
 
     return train_data, test_data
 
@@ -603,6 +638,7 @@ if __name__ == '__main__':
     # transform_error_data()
     print('Process 3 Done')
 
+    # %%
     '''
     4. 일별 데이터에서 피쳐를 추출하여 학습에 적합한 데이터로 변경 
     *option 
@@ -612,6 +648,10 @@ if __name__ == '__main__':
     '''
     # from error data
     train_X, test_X = feature_extraction(option = 1)
+
+    cols = train_X.columns
+    train_X.columns = range(train_X.shape[1])
+    test_X.columns = range(test_X.shape[1])
     print('Process 4 Done')
 
     '''
@@ -623,35 +663,41 @@ if __name__ == '__main__':
     print('Process 5 Done')
 
     '''
-    6. parameter tuning
+    6. fit
     '''
-    MAX_EVALS = 1 # num iteration
+    param_select_option = input('Param: (1) default, (2) bayes opt, (3) previous best param')
+    param_select_option = int(param_select_option)
+    if param_select_option == 1:
+        params = {
+            'boosting_type': 'gbdt',
+            'objective': 'binary',
+            'metric': 'auc',
+            'seed': 1015,
+            'verbose': 0,
+        }
 
-    from hyperopt import hp, tpe, fmin, Trials, STATUS_OK, STATUS_FAIL
-    bayes_trials = Trials()
-    obj = Bayes_tune_model()
-    tuning_algo = tpe.suggest  # -- bayesian opt
-    # tuning_algo = tpe.rand.suggest # -- random search
-    obj.process('lgb', [train_X, train_y],
-                bayes_trials, tuning_algo, MAX_EVALS)
+    elif param_select_option == 2:
+        MAX_EVALS = input('Number of iteration for tuning')
+        MAX_EVALS = int(MAX_EVALS)
 
-    # save the best param
-    best_param = sorted(bayes_trials.results, key=lambda k: k['loss'])[0]['params']
-    with open(f'{param_save_path}tuning_result_1.pkl', 'wb') as f:
-        pickle.dump(best_param, f, pickle.HIGHEST_PROTOCOL)
-    print('Process 6 Done')
+        bayes_trials = Trials()
+        obj = Bayes_tune_model()
+        tuning_algo = tpe.suggest  # -- bayesian opt
+        # tuning_algo = tpe.rand.suggest # -- random search
+        obj.process('lgb', [train_X, train_y],
+                    bayes_trials, tuning_algo, MAX_EVALS)
 
-    '''
-    7. fit
-    '''
-    # params = {
-    #     'boosting_type': 'gbdt',
-    #     'objective': 'binary',
-    #     'metric': 'auc',
-    #     'seed': 1015,
-    #     'verbose': 0,
-    # }
-    params = best_param
+        # save the best param
+        best_param = sorted(bayes_trials.results, key=lambda k: k['loss'])[0]['params']
+        with open(f'tune_results/0128-2.pkl', 'wb') as f:
+            pickle.dump(best_param, f, pickle.HIGHEST_PROTOCOL)
+        print('Process 6 Done')
+        params = best_param
+
+    elif param_select_option == 3:
+        from util import load_obj
+        params = load_obj('0128')[0]['params']
+
     models, valid_probs = train_model(train_X, train_y, params)
 
     # evaluate
@@ -664,6 +710,7 @@ if __name__ == '__main__':
     print('Process 7 Done')
     print('Validation score is {:.5f}'.format(auc_score))
 
+#%%
     '''
     8. predict
     '''
