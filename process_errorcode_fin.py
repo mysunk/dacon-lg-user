@@ -92,6 +92,174 @@ def process_errordata_in_day():
     del err_type_code_test
 
 
+# def processing_errcode(errortype, errorcode):
+#     '''
+#     errortype과 errorcode를 조합해서 새로운 error type을 생성
+#     '''
+#     new_errtype = errortype.copy().astype(str)
+#     for e in range(1, 43):
+#         idx = errortype == e
+#
+#         # 값이 없을 경우
+#         if idx.sum() == 0:
+#             continue
+#
+#         # 값이 있을 경우
+#         errcode = errorcode[idx]
+#
+#         # 공백처리 및 다른 처리..
+#         for i, ec in enumerate(errcode.copy()):
+#             ec = ec.strip()  # 앞뒤로 공백 제거
+#             ec = ec.replace('_', '-')
+#             if '.' in ec:
+#                 ec= ec.split('.')[0]
+#             if ec.isdigit():
+#                 errcode[i] = str(int(ec))
+#             errcode[i] = ec
+#
+#         if e == 1:
+#             for i, ec in enumerate(errcode):
+#                 if ec == '0':
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+#                 elif ec[0:2] == 'P-':
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+#                 else:
+#                     print(f'Unknown error code for error type {e}:: {ec}')
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+#         elif e in [2, 4, 31, 37, 39, 40]:
+#             # 0과 1만 valid
+#             idx_unknown = (errcode != '0') * (errcode != '1')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         elif e == 3:
+#             # 0, 1, 2만 valid
+#             idx_unknown = (errcode != '0') * (errcode != '1') * (errcode != '2')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         elif e == 30:
+#             # 0, 1, 2, 3, 4만 valid
+#             idx_unknown = (errcode != '0') * (errcode != '1') * (errcode != '2') * (errcode != '3') * (errcode != '4')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         elif e == 5:
+#             for i, ec in enumerate(errcode):
+#                 if ec[0:2] in ['Y-', 'V-', 'U-', 'S-', 'Q-', 'P-', 'M-', 'J-', 'H-', 'E-', 'D-', 'C-', 'B-','En']:
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+#                 elif ec == 'http':
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'http'
+#                 elif ec.isdigit():
+#                     if int(ec) in [0, 1]:
+#                         new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+#                     else:
+#                         new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+#                 else:
+#                     print(f'UNKNOWN error code for type {e} :: {ec}')
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+#         elif e == 8:
+#             for i, ec in enumerate(errcode):
+#                 if ec =='20':
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + '20'
+#                 elif ec in ['PHONE-ERR', 'PUBLIC-ERR']:
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+#                 else:
+#                     print(f'UNKNOWN error code for type {e} :: {ec}')
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+#         elif e == 9:
+#             for i, ec in enumerate(errcode):
+#                 if ec == '1':
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-1'
+#                 elif ec[0:2] in ['C-', 'V-']:
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+#                 else:
+#                     print(f'UNKNOWN error code for type {e} :: {ec}')
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-UNKNOWN'
+#         elif e in [10, 11, 12, 13, 15, 16, 18, 19, 20, 21, 22, 24, 26, 27, 28, 35]:
+#             # 1만 valid
+#             idx_unknown = (errcode != '1')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         elif e == 14:
+#             # 1만 valid
+#             idx_unknown = (errcode != '1') * (errcode != '13') * (errcode != '14')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         elif e == 17:
+#             # 1만 valid
+#             idx_unknown = (errcode != '1') * (errcode != '12') * (errcode != '13') * (errcode != '14') * (errcode != '21')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         elif e == 25:
+#             for i, ec in enumerate(errcode):
+#                 if 'UNKNOWN' in ec:
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+#                 elif 'fail' in ec:
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'fail'
+#                 elif 'timeout' in ec:
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'timeout'
+#                 elif 'cancel' in ec:
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'cancel'
+#                 elif 'terminate' in ec:
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'terminate'
+#                 elif ec.isdigit():
+#                     if int(ec) in [1, 2]:
+#                         new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+#                     else:
+#                         new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+#                 else:
+#                     print(f'Unknown error code for error type {e}:: {ec}')
+#                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+#         elif e == 32:
+#             new_errtype[idx] = 'UNKNOWN'
+#         elif e == 33:
+#             idx_unknown = (errcode != '1') * (errcode != '2') * (errcode != '3')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         elif e == 34:
+#             idx_unknown = (errcode != '1') * (errcode != '2') * (errcode != '3') * (errcode != '4') * (errcode != '5') * (errcode != '6')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         elif e == 36:
+#             idx_unknown = (errcode != '8')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         elif e == 38:
+#             new_errtype[idx] = 'UNKNOWN'
+#         elif e == 41:
+#             idx_unknown = (errcode != 'NFANDROID2')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         elif e == 42:
+#             idx_unknown = (errcode != '2') * (errcode != '3')
+#             if idx_unknown.sum() != 0:
+#                 print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
+#             new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
+#             new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+#         else:
+#             new_errtype[idx] = 'UNKNOWN'
+#
+#     return new_errtype # 정상적인 return
+
+
 def processing_errcode(errortype, errorcode):
     '''
     errortype과 errorcode를 조합해서 새로운 error type을 생성
@@ -106,100 +274,46 @@ def processing_errcode(errortype, errorcode):
 
         # 값이 있을 경우
         errcode = errorcode[idx]
-
-        # 공백처리 및 다른 처리..
-        for i, ec in enumerate(errcode.copy()):
-            ec = ec.strip()  # 앞뒤로 공백 제거
-            ec = ec.replace('_', '-')
-            if '.' in ec:
-                ec= ec.split('.')[0]
-            if ec.isdigit():
-                errcode[i] = str(int(ec))
-            errcode[i] = ec
-
         if e == 1:
             for i, ec in enumerate(errcode):
                 if ec == '0':
                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
-                elif ec[0:2] == 'P-':
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+                elif ec[0] == 'P':
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'P'
+                elif ec.isdigit():
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
                 else:
-                    print(f'Unknown error code for error type {e}:: {ec}')
+                    print('Unknown error code for error type 9')
                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
-        elif e in [2, 4, 31, 37, 39, 40]:
-            # 0과 1만 valid
-            idx_unknown = (errcode != '0') * (errcode != '1')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
-        elif e == 3:
-            # 0, 1, 2만 valid
-            idx_unknown = (errcode != '0') * (errcode != '1') * (errcode != '2')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
-        elif e == 30:
-            # 0, 1, 2, 3, 4만 valid
-            idx_unknown = (errcode != '0') * (errcode != '1') * (errcode != '2') * (errcode != '3') * (errcode != '4')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
         elif e == 5:
             for i, ec in enumerate(errcode):
-                if ec[0:2] in ['Y-', 'V-', 'U-', 'S-', 'Q-', 'P-', 'M-', 'J-', 'H-', 'E-', 'D-', 'C-', 'B-','En']:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
-                elif ec == 'http':
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'http'
+                if ec[0] in ['Y', 'V', 'U', 'S', 'Q', 'P', 'M', 'J', 'H', 'E', 'D', 'C', 'B']:
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec[0]
+                elif ec == 'nan':
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
                 elif ec.isdigit():
-                    if int(ec) in [0, 1]:
-                        new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
-                    else:
-                        new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
                 else:
-                    print(f'UNKNOWN error code for type {e} :: {ec}')
+                    print(f'UNKNOWN error code for type 5 :: {ec}')
                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
         elif e == 8:
             for i, ec in enumerate(errcode):
-                if ec =='20':
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + '20'
-                elif ec in ['PHONE-ERR', 'PUBLIC-ERR']:
+                if ec.isdigit():
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
+                elif ec in ['PHONE_ERR', 'PUBLIC_ERR']:
                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
                 else:
-                    print(f'UNKNOWN error code for type {e} :: {ec}')
+                    print(f'UNKNOWN error code for type 5 :: {ec}')
                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
         elif e == 9:
             for i, ec in enumerate(errcode):
-                if ec == '1':
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-1'
-                elif ec[0:2] in ['C-', 'V-']:
-                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+                if ec.isdigit():
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-num'
+                elif ec[0] in ['C', 'V']:
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec[0]
                 else:
-                    print(f'UNKNOWN error code for type {e} :: {ec}')
+                    print('Unknown error code for error type 9')
                     new_errtype[np.where(idx)[0][i]] = str(e) + '-UNKNOWN'
-        elif e in [10, 11, 12, 13, 15, 16, 18, 19, 20, 21, 22, 24, 26, 27, 28, 35]:
-            # 1만 valid
-            idx_unknown = (errcode != '1')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
-        elif e == 14:
-            # 1만 valid
-            idx_unknown = (errcode != '1') * (errcode != '13') * (errcode != '14')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
-        elif e == 17:
-            # 1만 valid
-            idx_unknown = (errcode != '1') * (errcode != '12') * (errcode != '13') * (errcode != '14') * (errcode != '21')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
         elif e == 25:
             for i, ec in enumerate(errcode):
                 if 'UNKNOWN' in ec:
@@ -213,49 +327,16 @@ def processing_errcode(errortype, errorcode):
                 elif 'terminate' in ec:
                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'terminate'
                 elif ec.isdigit():
-                    if int(ec) in [1, 2]:
-                        new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
-                    else:
-                        new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
                 else:
-                    print(f'Unknown error code for error type {e}:: {ec}')
+                    print('Unknown error code for error type 9')
                     new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
         elif e == 32:
-            new_errtype[idx] = 'UNKNOWN'
-        elif e == 33:
-            idx_unknown = (errcode != '1') * (errcode != '2') * (errcode != '3')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
-        elif e == 34:
-            idx_unknown = (errcode != '1') * (errcode != '2') * (errcode != '3') * (errcode != '4') * (errcode != '5') * (errcode != '6')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
-        elif e == 36:
-            idx_unknown = (errcode != '8')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+            new_errtype[idx] = str(e) + '-num'
         elif e == 38:
-            new_errtype[idx] = 'UNKNOWN'
-        elif e == 41:
-            idx_unknown = (errcode != 'NFANDROID2')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
-        elif e == 42:
-            idx_unknown = (errcode != '2') * (errcode != '3')
-            if idx_unknown.sum() != 0:
-                print(f'Unknown error code for error type {e}:: {errcode[idx_unknown]}')
-            new_errtype[np.where(idx)[0][idx_unknown]] = str(e) + '-' + 'UNKNOWN'
-            new_errtype[np.where(idx)[0][~idx_unknown]] = [str(e) + '-' + s for s in errcode[~idx_unknown]]
+            new_errtype[idx] = str(e) + '-num'
         else:
-            new_errtype[idx] = 'UNKNOWN'
+            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
 
     return new_errtype # 정상적인 return
 
@@ -380,7 +461,7 @@ def transform_error_data():
     # train_fwvers = np.array(fwver_list)
 
     # save
-    np.save(f'{data_save_path}train_err_code_w_38.npy', train_err_code)
+    np.save(f'{data_save_path}train_err_code_v1_w_38.npy', train_err_code)
     # np.save(f'{data_save_path}train_err_type.npy', train_err_code)
     # np.save(f'{data_save_path}train_models.npy', train_models)
     # np.save(f'{data_save_path}train_fwvers.npy', train_fwvers)
@@ -404,7 +485,7 @@ def transform_error_data():
     # test_fwvers = np.array(fwver_list)
 
     # save
-    np.save(f'{data_save_path}test_err_code_w_38.npy', test_err_code)
+    np.save(f'{data_save_path}test_err_code_v1_w_38.npy', test_err_code)
     # np.save(f'{data_save_path}test_models.npy', test_models)
     # np.save(f'{data_save_path}test_fwvers.npy', test_fwvers)
 
@@ -604,8 +685,8 @@ def feature_extraction(option = 1):
     if option != 3:
         # train_err_arr = np.load(f'{data_save_path}train_err_code_v2.npy')
         # test_err_arr = np.load(f'{data_save_path}test_err_code_v2.npy')
-        train_err_arr = np.load(f'{data_save_path}train_err_code_w_38.npy')
-        test_err_arr = np.load(f'{data_save_path}test_err_code_w_38.npy')
+        train_err_arr = np.load(f'{data_save_path}train_err_code_v1_w_38.npy')
+        test_err_arr = np.load(f'{data_save_path}test_err_code_v1_w_38.npy')
         # train_err_arr = np.load(f'{data_save_path}train_err_type.npy')
         # test_err_arr = np.load(f'{data_save_path}test_err_type.npy')
 
@@ -671,7 +752,6 @@ def train_model(train_x, train_y, params):
     '''
     cross validation with given data
     '''
-    models = []
     valid_probs = np.zeros((train_y.shape))
     # -------------------------------------------------------------------------------------
     # 5 Kfold cross validation
@@ -708,11 +788,18 @@ def train_model(train_x, train_y, params):
         valid_prob = model.predict(valid_x)
         valid_probs[val_idx] = valid_prob
 
-        models.append(model)
 
         print(model.best_score['valid_0']['auc'])
 
-    return models, valid_probs
+    d_train = lgb.Dataset(train_x, train_y)
+    model = lgb.train(
+        params,
+        train_set=d_train,
+        num_boost_round=1000,
+        feval=f_pr_auc,
+        verbose_eval=False,
+    )
+    return model, valid_probs
 
 
 def make_param_int(param, key_names):
@@ -805,7 +892,7 @@ if __name__ == '__main__':
     '''
     3. 1에서 변경된 데이터를 차례로 processing
     '''
-    # transform_error_data()
+    transform_error_data()
     print('Process 3 Done')
 
     # %%+
@@ -871,7 +958,7 @@ if __name__ == '__main__':
         from util import load_obj
         params = load_obj('0129-local')[0]['params']
 
-    models, valid_probs = train_model(train_X, train_y, params)
+    model, valid_probs = train_model(train_X, train_y, params)
 
     # evaluate
     threshold = 0.5
@@ -890,10 +977,7 @@ if __name__ == '__main__':
     submission = pd.read_csv(data_path + '/sample_submission.csv')
 
     # predict
-    test_prob = []
-    for model in models:
-        test_prob.append(model.predict(test_X))
-    test_prob = np.mean(test_prob, axis=0)
+    test_prob = model.predict(test_X)
 
     submission['problem'] = test_prob.reshape(-1)
     submission.to_csv("submission.csv", index=False)
