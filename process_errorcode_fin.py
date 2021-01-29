@@ -675,7 +675,7 @@ def train_model(train_x, train_y, params):
     valid_probs = np.zeros((train_y.shape))
     # -------------------------------------------------------------------------------------
     # 5 Kfold cross validation
-    k_fold = KFold(n_splits=5, shuffle=True, random_state=0)
+    k_fold = KFold(n_splits=10, shuffle=True, random_state=0)
     for train_idx, val_idx in k_fold.split(train_x):
         # split train, validation set
         if type(train_x) == pd.DataFrame:
