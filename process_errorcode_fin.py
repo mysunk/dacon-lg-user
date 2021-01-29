@@ -106,8 +106,69 @@ def processing_errcode(errortype, errorcode):
 
         # 값이 있을 경우
         errcode = errorcode[idx]
-
-        new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
+        if e == 1:
+            for i, ec in enumerate(errcode):
+                if ec == '0':
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+                elif ec[0] == 'P':
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'P'
+                elif ec.isdigit():
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
+                else:
+                    print('Unknown error code for error type 9')
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+        elif e == 5:
+            for i, ec in enumerate(errcode):
+                if ec[0] in ['Y', 'V', 'U', 'S', 'Q', 'P', 'M', 'J', 'H', 'E', 'D', 'C', 'B']:
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec[0]
+                elif ec == 'nan':
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+                elif ec.isdigit():
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
+                else:
+                    print(f'UNKNOWN error code for type 5 :: {ec}')
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+        elif e == 8:
+            for i, ec in enumerate(errcode):
+                if ec.isdigit():
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
+                elif ec in ['PHONE_ERR', 'PUBLIC_ERR']:
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec
+                else:
+                    print(f'UNKNOWN error code for type 5 :: {ec}')
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+        elif e == 9:
+            for i, ec in enumerate(errcode):
+                if ec.isdigit():
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-num'
+                elif ec[0] in ['C', 'V']:
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + ec[0]
+                else:
+                    print('Unknown error code for error type 9')
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-UNKNOWN'
+        elif e == 25:
+            for i, ec in enumerate(errcode):
+                if 'UNKNOWN' in ec:
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+                elif 'fail' in ec:
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'fail'
+                elif 'timeout' in ec:
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'timeout'
+                elif 'cancel' in ec:
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'cancel'
+                elif 'terminate' in ec:
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'terminate'
+                elif ec.isdigit():
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'num'
+                else:
+                    print('Unknown error code for error type 9')
+                    new_errtype[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
+        elif e == 32:
+            new_errtype[idx] = str(e) + '-num'
+        elif e == 38:
+            new_errtype[idx] = str(e) + '-num'
+        else:
+            new_errtype[idx] = np.array([str(e) + '-' + ec for ec in errcode])
 
     return new_errtype # 정상적인 return
 
@@ -665,8 +726,9 @@ if __name__ == '__main__':
     '''
     6. fit
     '''
-    param_select_option = input('Param: (1) default, (2) bayes opt, (3) previous best param')
-    param_select_option = int(param_select_option)
+    # param_select_option = input('Param: (1) default, (2) bayes opt, (3) previous best param')
+    # param_select_option = int(param_select_option)
+    param_select_option = 2
     if param_select_option == 1:
         params = {
             'boosting_type': 'gbdt',
@@ -677,8 +739,9 @@ if __name__ == '__main__':
         }
 
     elif param_select_option == 2:
-        MAX_EVALS = input('Number of iteration for tuning')
-        MAX_EVALS = int(MAX_EVALS)
+        # MAX_EVALS = input('Number of iteration for tuning')
+        # MAX_EVALS = int(MAX_EVALS)
+        MAX_EVALS = 2500
 
         bayes_trials = Trials()
         obj = Bayes_tune_model()
@@ -689,7 +752,7 @@ if __name__ == '__main__':
 
         # save the best param
         best_param = sorted(bayes_trials.results, key=lambda k: k['loss'])[0]['params']
-        with open(f'tune_results/0128-2.pkl', 'wb') as f:
+        with open(f'tune_results/0129-local.pkl', 'wb') as f:
             pickle.dump(best_param, f, pickle.HIGHEST_PROTOCOL)
         print('Process 6 Done')
         params = best_param
