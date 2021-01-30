@@ -755,7 +755,8 @@ def train_model(train_x, train_y, params):
     valid_probs = np.zeros((train_y.shape))
     # -------------------------------------------------------------------------------------
     # 5 Kfold cross validation
-    k_fold = KFold(n_splits=10, shuffle=True, random_state=0)
+    models = []
+    k_fold = KFold(n_splits = 10, shuffle=True, random_state=0)
     for train_idx, val_idx in k_fold.split(train_x):
         # split train, validation set
         if type(train_x) == pd.DataFrame:
@@ -791,15 +792,8 @@ def train_model(train_x, train_y, params):
 
         print(model.best_score['valid_0']['auc'])
 
-    d_train = lgb.Dataset(train_x, train_y)
-    model = lgb.train(
-        params,
-        train_set=d_train,
-        num_boost_round=1000,
-        feval=f_pr_auc,
-        verbose_eval=False,
-    )
-    return model, valid_probs
+        models.append(model)
+    return models, valid_probs
 
 
 def make_param_int(param, key_names):
@@ -892,7 +886,7 @@ if __name__ == '__main__':
     '''
     3. 1에서 변경된 데이터를 차례로 processing
     '''
-    transform_error_data()
+    # transform_error_data()
     print('Process 3 Done')
 
     # %%+
@@ -956,9 +950,10 @@ if __name__ == '__main__':
 
     elif param_select_option == 3:
         from util import load_obj
-        params = load_obj('0129-local')[0]['params']
+        # params = load_obj('0129-local')[0]['params']
+        params = load_obj('0129-v2-local')[0]['params']
 
-    model, valid_probs = train_model(train_X, train_y, params)
+    models, valid_probs = train_model(train_X, train_y, params)
 
     # evaluate
     threshold = 0.5
@@ -977,8 +972,11 @@ if __name__ == '__main__':
     submission = pd.read_csv(data_path + '/sample_submission.csv')
 
     # predict
-    test_prob = model.predict(test_X)
+    test_prob = []
+    for model in models:
+        test_prob.append(model.predict(test_X))
+    test_prob = np.mean(test_prob, axis=0)
 
     submission['problem'] = test_prob.reshape(-1)
-    submission.to_csv("submission.csv", index=False)
+    submission.to_csv("submit_15.csv", index=False)
     print('Process 8 Done')
