@@ -368,6 +368,7 @@ def transform_errtype(data):
     err_code = np.zeros((30, N_NEW_ERRTYPE))
     err_type = np.zeros((30, N_ERRTYPE))
     errtype_38_errcode_sum = np.zeros((30,1), dtype=int)
+    # errtype_32_errcode_sum = np.zeros((30, 1), dtype=int)
     for day in range(1, 31):
         # error가 없는 user를 skip한다
         if data == {}:
@@ -380,6 +381,9 @@ def transform_errtype(data):
         # 38만 따로 처리
         idx_38 = data[day]['errtype'].values == 38
         errtype_38_errcode_sum[day-1] = np.sum(data[day]['errcode'].values[idx_38].astype(int))
+        #
+        # idx_32 = data[day]['errtype'].values == 32
+        # errtype_32_errcode_sum[day - 1] = np.sum(data[day]['errcode'].values[idx_32].astype(int))
 
         try:
             transformed_errcode = encoder.transform(transformed_errcode)
@@ -405,6 +409,7 @@ def transform_errtype(data):
         if v.size == 0:
             continue
         err_type[day - 1][v] += c
+    # err = np.concatenate([err_code, err_type, errtype_38_errcode_sum, errtype_32_errcode_sum], axis=1)
     err = np.concatenate([err_code, err_type, errtype_38_errcode_sum], axis=1)
     return err
 
@@ -814,21 +819,21 @@ class Bayes_tune_model(object):
         # LightGBM parameters
         self.space = {
             'objective':                'binary',
-            'min_child_weight':         hp.quniform('min_child_weight', 1, 10, 1),
-            'learning_rate':            hp.uniform('learning_rate',    0.0001, 0.2),
+            'min_child_weight':         hp.quniform('min_child_weight', 3, 10, 1),
+            'learning_rate':            hp.uniform('learning_rate',    0.01, 0.03),
             'max_depth':                -1,
-            'num_leaves':               hp.quniform('num_leaves',       5, 200, 1),
-            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 200, 1),	# overfitting 안되려면 높은 값
-            'reg_alpha':                hp.uniform('reg_alpha',0, 1),
-            'reg_lambda':               hp.uniform('reg_lambda',0, 1),
-            'colsample_bytree':         hp.uniform('colsample_bytree', 0.01, 1.0),
-            'colsample_bynode':		    hp.uniform('colsample_bynode',0.01,1.0),
-            'bagging_freq':			    hp.quniform('bagging_freq',	0,20,1),
-            'tree_learner':			    hp.choice('tree_learner',	['serial','feature','data','voting']),
-            'subsample':                hp.uniform('subsample', 0.01, 1.0),
+            'num_leaves':               hp.quniform('num_leaves',       20, 40, 1),
+            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	25, 30, 1),	# overfitting 안되려면 높은 값
+            'reg_alpha':                hp.uniform('reg_alpha',0.5, 0.6),
+            'reg_lambda':               hp.uniform('reg_lambda',0.9, 1),
+            'colsample_bytree':         hp.uniform('colsample_bytree', 0.1, 0.3),
+            'colsample_bynode':		    hp.uniform('colsample_bynode',0.9,1.0),
+            'bagging_freq':			    hp.quniform('bagging_freq',	0,5,1),
+            'tree_learner':			    hp.choice('tree_learner',	['voting']),
+            'subsample':                hp.uniform('subsample', 0.8, 1.0),
             'boosting':			        hp.choice('boosting', ['gbdt']),
-            'max_bin':			        hp.quniform('max_bin',		5,300,1), # overfitting 안되려면 낮은 값
-            "min_sum_hessian_in_leaf":  hp.uniform('min_sum_hessian_in_leaf',       1e-5,1e-1),
+            'max_bin':			        hp.quniform('max_bin',		2,10,1), # overfitting 안되려면 낮은 값
+            "min_sum_hessian_in_leaf":  hp.uniform('min_sum_hessian_in_leaf',       0.01,0.03),
             'random_state':             self.random_state,
             'n_jobs':                   -1,
             'metrics':                  'auc',
@@ -886,7 +891,7 @@ if __name__ == '__main__':
     '''
     3. 1에서 변경된 데이터를 차례로 processing
     '''
-    # transform_error_data()
+    transform_error_data()
     print('Process 3 Done')
 
     # %%+
@@ -943,15 +948,15 @@ if __name__ == '__main__':
 
         # save the best param
         best_param = sorted(bayes_trials.results, key=lambda k: k['loss'])[0]['params']
-        with open(f'tune_results/0129-v2-local.pkl', 'wb') as f:
+        with open(f'tune_results/0130-local.pkl', 'wb') as f:
             pickle.dump(bayes_trials.results, f, pickle.HIGHEST_PROTOCOL)
         print('Process 6 Done')
         params = best_param
 
     elif param_select_option == 3:
         from util import load_obj
-        # params = load_obj('0129-local')[0]['params']
-        params = load_obj('0129-v2-local')[0]['params']
+        params = load_obj('0129-local')[0]['params']
+        # params = load_obj('0129-v2-local')[0]['params']
 
     models, valid_probs = train_model(train_X, train_y, params)
 
@@ -978,5 +983,5 @@ if __name__ == '__main__':
     test_prob = np.mean(test_prob, axis=0)
 
     submission['problem'] = test_prob.reshape(-1)
-    submission.to_csv("submit_15.csv", index=False)
+    submission.to_csv("submission.csv", index=False)
     print('Process 8 Done')
