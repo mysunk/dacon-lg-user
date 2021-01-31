@@ -34,6 +34,7 @@ NUM_CPU = multiprocessing.cpu_count()
 N_USER_TRAIN = len(TRAIN_ID_LIST)
 N_USER_TEST = len(TEST_ID_LIST)
 N_ERRTYPE = 42
+N_QUALITY = 13
 
 
 #%% 필요 함수 정의
@@ -291,7 +292,46 @@ def transform_fwver(data):
     return fwver
 
 
-def transform_error_data():
+def transform_quality_data(data_type):
+    '''
+    quality data의 dataframe에서 array로 변경
+    '''
+    if data_type == 'train':
+        id_list = TRAIN_ID_LIST
+        n_user = N_USER_TRAIN
+    elif data_type == 'test':
+        id_list = TEST_ID_LIST
+        n_user = N_USER_TEST
+
+    quality = pd.read_csv(data_path + f'{data_type}_quality_data.csv')
+    quality['time'] = pd.to_datetime(quality['time'], format='%Y%m%d%H%M%S')
+    quality.replace(",", "", regex=True, inplace=True)
+    quality.loc[:,'quality_0':'quality_12'] = quality.loc[:,'quality_0':'quality_12'].astype(float)
+
+    # drop nan
+    drop_idx = np.any(pd.isnull(quality), axis=1)
+    quality = quality.loc[~drop_idx,:].reset_index(drop=True)
+
+    # drop -1
+    qual_arr = np.zeros((n_user, 31, N_QUALITY))
+    count_minus_1 = np.zeros((n_user, 31, N_QUALITY), dtype=int)
+    for i, user_id in tqdm(enumerate(id_list)):
+        idx = quality['user_id'] == user_id
+        if idx.sum() == 0:
+            continue
+        quality_sub = quality.loc[idx,:]
+        for j, day in enumerate([31] + list(range(1, 31))): # 10월 31일 처리
+            idx_day = quality_sub['time'].dt.day == day
+            # -1 처리
+            minus_1_idx = quality_sub.loc[idx_day, 'quality_0':'quality_12'] == -1
+            count_minus_1[i, j, :] = minus_1_idx.sum()
+            qual_arr[i, j, :] = np.nansum(quality_sub.loc[idx_day,'quality_0':'quality_12'][~minus_1_idx], axis=0)
+    qual_arr = np.append(qual_arr, count_minus_1, axis=2)
+    # FIXME
+    np.save(f'{data_save_path}{data_type}_quality.npy', qual_arr)
+
+
+def transform_error_data(data_type):
     '''
     dataframe에서 array로 변경
     1. error type and code
@@ -299,53 +339,35 @@ def transform_error_data():
     3. fwver
     '''
     #### train
-    with open(f'{data_save_path}err_type_code_train.pkl', 'rb') as f:
-        err_type_code_train = pickle.load(f)
+    with open(f'{data_save_path}err_type_code_{data_type}.pkl', 'rb') as f:
+        err_type_code = pickle.load(f)
+
+    if data_type == 'train':
+        n_user = N_USER_TRAIN
+    else:
+        n_user = N_USER_TEST
 
     # error type과 code를 조합한 것으로 transform
-    data_list = [err_type_code_train[user_idx] for user_idx in range(N_USER_TRAIN)]
-    train_err_list, model_list, fwver_list = [], [], []
+    data_list = [err_type_code[user_idx] for user_idx in range(n_user)]
+    err_list, model_list, fwver_list = [], [], []
     for data in tqdm(data_list):
-        train_err_list.append(transform_errtype(data))
-    #     model_list.append(transform_model_nm(data))
-    #     fwver_list.append(transform_fwver(data))
+        err_list.append(transform_errtype(data))
+        model_list.append(transform_model_nm(data))
+        fwver_list.append(transform_fwver(data))
 
 
     # list to array
-    train_err_code = np.array(train_err_list)
-    # train_models = np.array(model_list)
-    # train_fwvers = np.array(fwver_list)
+    err_code = np.array(err_list)
+    models = np.array(model_list)
+    fwvers = np.array(fwver_list)
 
     # save
-    np.save(f'{data_save_path}train_{errcode_save_name}.npy', train_err_code)
-    # np.save(f'{data_save_path}train_err_type.npy', train_err_code)
-    # np.save(f'{data_save_path}train_models.npy', train_models)
-    # np.save(f'{data_save_path}train_fwvers.npy', train_fwvers)
-
-    #### test
-    with open(f'{data_save_path}err_type_code_test.pkl', 'rb') as f:
-        err_type_code_test = pickle.load(f)
-
-    # error code 관련
-    # error type과 code를 조합한 것으로 transform
-    data_list = [err_type_code_test[user_idx] for user_idx in range(N_USER_TEST)]
-    test_err_list, model_list, fwver_list = [], [], []
-    for data in tqdm(data_list):
-        test_err_list.append(transform_errtype(data))
-    #     model_list.append(transform_model_nm(data))
-    #     fwver_list.append(transform_fwver(data))
-
-    # list to array
-    test_err_code = np.array(test_err_list)
-    # test_models = np.array(model_list)
-    # test_fwvers = np.array(fwver_list)
-
-    # save
-    np.save(f'{data_save_path}test_{errcode_save_name}.npy', test_err_code)
-    # np.save(f'{data_save_path}test_models.npy', test_models)
-    # np.save(f'{data_save_path}test_fwvers.npy', test_fwvers)
+    np.save(f'{data_save_path}{data_type}_{errcode_save_name}.npy', err_code)
+    np.save(f'{data_save_path}{data_type}_models.npy', models)
+    np.save(f'{data_save_path}{data_type}_fwvers.npy', fwvers)
 
     # FIXME: save 말고 바로 return으로 바꿔야 함
+
 
 from tsfresh.feature_extraction.feature_calculators \
     import fft_aggregated, fft_coefficient, agg_linear_trend, number_crossing_m, skewness, fourier_entropy, cwt_coefficients, cid_ce, \
@@ -371,15 +393,15 @@ def tsfresh_manually(train_err_r):
                                                                 {'attr': 'stderr', 'chunk_len': 10, 'f_agg': 'max'}])
             f4 = func1(symmetry_looking, train_err_r[i, :, j], [{'r': 0.35}])
 
-            # t1 = number_crossing_m(train_err_r[i, :, j], 0)
-            # t2 = skewness(train_err_r[i, :, j])
-            # t3 = fourier_entropy(train_err_r[i, :, j], 1)
-            # t4 = cid_ce(train_err_r[i, :, j], True)
-            # t_nu = pd.DataFrame(data=np.array([t1, t2, t3, t4]).reshape(1, -1),
-            #                     columns=['number_crossing_m', 'skewness', 'fourier_entropy', 'cid_ce'])
+            t1 = number_crossing_m(train_err_r[i, :, j], 0)
+            t2 = skewness(train_err_r[i, :, j])
+            t3 = fourier_entropy(train_err_r[i, :, j], 1)
+            t4 = cid_ce(train_err_r[i, :, j], True)
+            t_nu = pd.DataFrame(data=np.array([t1, t2, t3, t4]).reshape(1, -1),
+                                columns=['number_crossing_m', 'skewness', 'fourier_entropy', 'cid_ce'])
 
-            # feature_for_one_user = pd.concat([f1, f2, f3, f4, t_nu], axis=1)
-            feature_for_one_user = pd.concat([f1, f2, f3, f4], axis=1)
+            feature_for_one_user = pd.concat([f1, f2, f3, f4, t_nu], axis=1)
+            # feature_for_one_user = pd.concat([f1, f2, f3, f4], axis=1)
             feature_for_one_user.columns = [str(j) + '_' + c for c in feature_for_one_user.columns]
             tmp.append(feature_for_one_user)
 
@@ -390,43 +412,16 @@ def tsfresh_manually(train_err_r):
     return features
 
 
-def extract_err_manually(data, WINDOW = 3): # 임시로는 mean 등이고library 활용할 것
-    err_list = []
+def dimension_reduction(data, WINDOW): # 임시로는 mean 등이고library 활용할 것
+    data_list = []
     for i in range(31 - WINDOW):
         sum_ = np.sum(data[:, i:i + WINDOW, :], axis=1)
-        err_list.append(sum_)
-    # tsfresh
-    # err_r_raw = np.array(err_list).transpose(1,0,2)
-    # tsfresh_features = tsfresh_manually(err_r_raw)
-    # manually
-    err_r = np.concatenate(
-        [np.min(err_list, axis=0), np.max(err_list, axis=0), np.mean(err_list, axis=0),
-         np.median(err_list, axis=0)], axis=1)
-    err_df = pd.DataFrame(err_r)
-    return err_df
-
-
-def extract_err_library(data, WINDOW = 3):
-    err_list = []
-    for i in range(31 - WINDOW):
-        sum_ = np.sum(data[:, i:i + WINDOW, :], axis=1)
-        err_list.append(sum_)
-    err_r = np.array(err_list).transpose(1,0,2)
-
-    df_list = []
-    for i, err in tqdm(enumerate(err_r)):
-        df_list.append(np.append(np.array([i] * err.shape[0]).reshape(-1, 1), err, axis=1))
-    df_list = pd.DataFrame(np.concatenate(df_list, axis=0), columns=['id'] + list(range(N_ERRTYPE + N_NEW_ERRTYPE)))
-    df_list['id'] = df_list['id'].astype(int)
-
-    tf_data = []
-    for i in range(N_ERRTYPE + N_NEW_ERRTYPE):
-        df_list_sub = df_list.loc[:,['id',i]]
-        tf_data_sub = extract_features(df_list_sub, column_id='id',
-                                default_fc_parameters=EfficientFCParameters())
-        tf_data.append(tf_data_sub)
-    tf_data = pd.concat(tf_data, axis=1)
-    return tf_data
+        data_list.append(sum_)
+    data_r = np.concatenate(
+        [np.min(data_list, axis=0), np.max(data_list, axis=0), np.mean(data_list, axis=0),
+         np.median(data_list, axis=0), np.std(data_list, axis=0)], axis=1)
+    data_df = pd.DataFrame(data_r)
+    return data_df
 
 
 def extract_model_nm(data, id_list):
@@ -529,49 +524,23 @@ def extract_fwver(data, id_list):
     return fwver_df
 
 
-def feature_extraction(option = 1):
+def feature_extraction(ERROR_WINDOW = 3, QUAL_WINDOW = 1):
     '''
     1. Extract error type
     2. Extract model_nm
+    3. Extract fwver
+    4. Extract quality
     *option
     1: manually, 2: extract from library, 3. load saved data extracted from library
     '''
 
     ### 0. load dataset
-    if option != 3:
-        # train_err_arr = np.load(f'{data_save_path}train_err_code_v2.npy')
-        test_err_arr = np.load(f'{data_save_path}test_{errcode_save_name}.npy')
-        train_err_arr = np.load(f'{data_save_path}train_{errcode_save_name}.npy')
-        # test_err_arr = np.load(f'{data_save_path}test_{errcode_save_name}.npy')
-        # train_err_arr = np.load(f'{data_save_path}train_err_type.npy')
-        # test_err_arr = np.load(f'{data_save_path}test_err_type.npy')
-
-        # train_err_arr = train_err_arr[N_NEW_ERRTYPE:,:]
-        # test_err_arr = test_err_arr[N_NEW_ERRTYPE:, :]
+    test_err_arr = np.load(f'{data_save_path}test_{errcode_save_name}.npy')
+    train_err_arr = np.load(f'{data_save_path}train_{errcode_save_name}.npy')
 
     ### 1. extract features based on option
-    if option == 1:
-        train_err_df = extract_err_manually(train_err_arr, WINDOW = 3)
-        test_err_df = extract_err_manually(test_err_arr, WINDOW = 3)
-    elif option == 2:
-        train_err_df = extract_err_library(train_err_arr)
-        test_err_df = extract_err_library(test_err_arr)
-        nan_idx = np.any(pd.isnull(pd.concat([train_err_df, test_err_df], axis=0)), axis=0)
-        tmp = pd.concat([train_err_df, test_err_df], axis=0)
-        train_err_df = train_err_df.loc[:, ~nan_idx]
-        test_err_df = tmp.iloc[N_USER_TRAIN:, :].reset_index(drop=True)
-        test_err_df = test_err_df.loc[:, ~nan_idx]
-        # feature selection
-        train_prob = pd.read_csv(data_path + 'train_problem_data.csv')
-        train_y = np.zeros((N_USER_TRAIN))
-        train_y[train_prob.user_id.unique() - 10000] = 1
-        train_err_df = select_features(train_err_df, train_y)
-        test_err_df = test_err_df.loc[:,train_err_df.columns]
-        train_err_df.to_csv(f'{data_save_path}train_err_df_library.csv')
-        test_err_df.to_csv(f'{data_save_path}test_err_df_library.csv')
-    if option == 3:
-        train_err_df = pd.read_csv(f'{data_save_path}train_err_df_library.csv')
-        test_err_df = pd.read_csv(f'{data_save_path}test_err_df_library.csv')
+    train_err_df = dimension_reduction(train_err_arr, WINDOW = ERROR_WINDOW)
+    test_err_df = dimension_reduction(test_err_arr, WINDOW = ERROR_WINDOW)
 
     ### 2. extract features from model_nm
     train_models = np.load(f'{data_save_path}train_models.npy')
@@ -585,14 +554,10 @@ def feature_extraction(option = 1):
     test_fwvers = np.load(f'{data_save_path}test_fwvers.npy')
     test_fwver_df = extract_fwver(test_fwvers, TEST_ID_LIST)
 
-    ### 4. concatenate features
+    ### 4.extract features from quality
+    ### End. concatenate features
     train_data = pd.concat([train_err_df, train_model_df, train_fwver_df], axis=1)
     test_data = pd.concat([test_err_df, test_model_df, test_fwver_df], axis=1)
-
-    # train_data = pd.concat([train_err_df, train_model_df], axis=1)
-    # test_data = pd.concat([test_err_df, test_model_df], axis=1)
-    # train_data = train_err_df
-    # test_data = test_err_df
 
     return train_data, test_data
 
@@ -612,7 +577,7 @@ def train_model(train_x, train_y, params):
     # -------------------------------------------------------------------------------------
     # Kfold cross validation
     models = []
-    k_fold = KFold(n_splits = 10, shuffle=True, random_state=0)
+    k_fold = KFold(n_splits = 5, shuffle=True, random_state=0)
     for train_idx, val_idx in k_fold.split(train_x):
         # split train, validation set
         if type(train_x) == pd.DataFrame:
@@ -740,13 +705,15 @@ if __name__ == '__main__':
     from sklearn.preprocessing import LabelEncoder
     encoder = LabelEncoder()
     encoder.fit(new_errtype)
-    print('Process 2 Done')
+    print('Encoding error code is done')
     '''
     3. 1에서 변경된 데이터를 차례로 processing
     '''
     if transform == True:
-        transform_error_data()
-    print('Process 3 Done')
+        for data_type in ['train', 'test']:
+            # transform_error_data(data_type)
+            transform_quality_data(data_type)
+    print('Transform error and quality data is done')
 
     # %%+
     '''
@@ -756,71 +723,40 @@ if __name__ == '__main__':
     2: extract from library
     3. load saved data extracted from library
     '''
-    # from error data
-    train_X, test_X = feature_extraction(option = 1)
+    # from error and quality data
+    ERROR_WINDOW = 3
+    train_error_df, test_error_df = feature_extraction(ERROR_WINDOW = ERROR_WINDOW)
 
-    # From quality data
-    def quality_append(data_type):
-        quality = pd.read_csv(f'{data_path}{data_type}_quality_data_cleansed.csv')
+    QUAL_WINDOW = 8
+    train_qual_arr = np.load(f'{data_save_path}train_quality.npy')
+    test_qual_arr = np.load(f'{data_save_path}test_quality.npy')
+    train_quality_df = dimension_reduction(train_qual_arr, WINDOW=QUAL_WINDOW)
+    test_quality_df = dimension_reduction(test_qual_arr, WINDOW=QUAL_WINDOW)
 
-        # quality data
-        if data_type == 'train':
-            id_list = TRAIN_ID_LIST
-            n_user = N_USER_TRAIN
-        else:
-            id_list = TEST_ID_LIST
-            n_user = N_USER_TEST
-        quality_mean = np.zeros((n_user, 13))
-        quality_max = np.zeros((n_user, 13))
-        quality_min = np.zeros((n_user, 13))
-        quality_med = np.zeros((n_user, 13))
-        quality_std = np.zeros((n_user, 13))
-        for i, user_id in tqdm(enumerate(id_list)):
-            idx = quality['user_id'] == user_id
-            if idx.sum() != 0:
-                quality_mean[i, :] = quality.loc[idx, 'quality_0':'quality_12'].mean(axis=0)
-                quality_max[i, :] = quality.loc[idx, 'quality_0':'quality_12'].max(axis=0)
-                quality_min[i, :] = quality.loc[idx, 'quality_0':'quality_12'].min(axis=0)
-                quality_med[i, :] = np.median(quality.loc[idx, 'quality_0':'quality_12'], axis=0)
-                quality_std[i, :] = np.std(quality.loc[idx, 'quality_0':'quality_12'], axis=0)
-        return quality_mean, quality_max, quality_min, quality_med, quality_std
-
-    train_quality_mean, train_quality_max, train_quality_min, train_quality_med, train_quality_std = quality_append('train')
-    for i in range(13):
-        train_X['quality_mean_'+str(i)] = train_quality_mean[:,i]
-        train_X['quality_max' + str(i)] = train_quality_max[:, i]
-        train_X['quality_min' + str(i)] = train_quality_min[:, i]
-        train_X['quality_med' + str(i)] = train_quality_med[:, i]
-        train_X['quality_std' + str(i)] = train_quality_std[:, i]
-
-    test_quality_mean, test_quality_max, test_quality_min, test_quality_med, test_quality_std = quality_append('test')
-    for i in range(13):
-        test_X['quality_mean_' + str(i)] = test_quality_mean[:, i]
-        test_X['quality_max' + str(i)] = test_quality_max[:, i]
-        test_X['quality_min' + str(i)] = test_quality_min[:, i]
-        test_X['quality_med' + str(i)] = test_quality_med[:, i]
-        test_X['quality_std' + str(i)] = test_quality_std[:, i]
+    train_X = pd.concat([train_error_df, train_quality_df], axis=1)
+    test_X = pd.concat([test_error_df, test_quality_df], axis=1)
 
     cols = train_X.columns
     train_X.columns = range(train_X.shape[1])
     test_X.columns = range(test_X.shape[1])
 
-    print('Process 4 Done')
+    print('Feature extraction is done')
 
+    #%%
     '''
     5. train_problem (y) 생성
     '''
     train_prob = pd.read_csv(data_path + 'train_problem_data.csv')
     train_y = np.zeros((N_USER_TRAIN))
     train_y[train_prob.user_id.unique() - 10000] = 1
-    print('Process 5 Done')
+    print('Make label data is done')
 
     '''
     6. fit
     '''
     param_select_option = input('Param: (1) default, (2) bayes opt, (3) previous best param')
     param_select_option = int(param_select_option)
-    # param_select_option = 2
+    # param_select_option = 1
     if param_select_option == 1:
         params = {
             'boosting_type': 'gbdt',
@@ -844,7 +780,7 @@ if __name__ == '__main__':
 
         # save the best param
         best_param = sorted(bayes_trials.results, key=lambda k: k['loss'])[0]['params']
-        with open(f'tune_results/0131-local-quality-included.pkl', 'wb') as f:
+        with open(f'tune_results/0131-local-quality-included-v2.pkl', 'wb') as f:
             pickle.dump(bayes_trials.results, f, pickle.HIGHEST_PROTOCOL)
         print('Process 6 Done')
         params = best_param
@@ -863,8 +799,24 @@ if __name__ == '__main__':
     precision = precision_score(train_y, valid_preds)
     auc_score = roc_auc_score(train_y, valid_probs)
      # validation score
-    print('Process 7 Done')
     print('Validation score is {:.5f}'.format(auc_score))
+    print('Data fitting and evaluation is done')
+
+#%% stacking
+    '''
+        7. stacking
+    '''
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import GridSearchCV
+
+
+    blendParams = {}  # test more values in your local machine
+    clf = GridSearchCV(LogisticRegression(solver='lbfgs'), blendParams,
+                       scoring='roc_auc',
+                       refit='True', n_jobs=-1, cv=5)
+    clf.fit(valid_probs.reshape(-1,1), train_y)
+    print('The Best parameters of the blending model\n{}'.format(clf.best_params_))
+    print('The best score:{}'.format(clf.best_score_))
 
 #%%
     '''
@@ -881,4 +833,4 @@ if __name__ == '__main__':
 
         submission['problem'] = test_prob.reshape(-1)
         submission.to_csv("submit_17.csv", index=False)
-        print('Process 8 Done')
+        print('Inference is done')
