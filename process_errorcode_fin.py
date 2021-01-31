@@ -20,7 +20,7 @@ param_save_path = 'params/'
 errcode_save_name = 'err_code_v1_w_38'
 
 transform = False
-infer = False
+infer = True
 
 if not os.path.isdir(data_save_path):
     os.mkdir(data_save_path)
@@ -612,7 +612,7 @@ def train_model(train_x, train_y, params):
     # -------------------------------------------------------------------------------------
     # Kfold cross validation
     models = []
-    k_fold = KFold(n_splits = 5, shuffle=True, random_state=0)
+    k_fold = KFold(n_splits = 10, shuffle=True, random_state=0)
     for train_idx, val_idx in k_fold.split(train_x):
         # split train, validation set
         if type(train_x) == pd.DataFrame:
@@ -844,7 +844,7 @@ if __name__ == '__main__':
 
         # save the best param
         best_param = sorted(bayes_trials.results, key=lambda k: k['loss'])[0]['params']
-        with open(f'tune_results/0131-local.pkl', 'wb') as f:
+        with open(f'tune_results/0131-local-quality-included.pkl', 'wb') as f:
             pickle.dump(bayes_trials.results, f, pickle.HIGHEST_PROTOCOL)
         print('Process 6 Done')
         params = best_param
@@ -880,5 +880,5 @@ if __name__ == '__main__':
         test_prob = np.mean(test_prob, axis=0)
 
         submission['problem'] = test_prob.reshape(-1)
-        submission.to_csv("submission.csv", index=False)
+        submission.to_csv("submit_17.csv", index=False)
         print('Process 8 Done')
