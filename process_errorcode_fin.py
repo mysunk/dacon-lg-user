@@ -17,10 +17,10 @@ import os
 data_path = 'data/'
 data_save_path = 'data_use/'
 param_save_path = 'params/'
-errcode_save_name = 'err_code_v1_w_38'
+errcode_save_name = 'err_data_final'
 
 transform = False
-infer = True
+infer = False
 
 if not os.path.isdir(data_save_path):
     os.mkdir(data_save_path)
@@ -35,7 +35,6 @@ N_USER_TRAIN = len(TRAIN_ID_LIST)
 N_USER_TEST = len(TEST_ID_LIST)
 N_ERRTYPE = 42
 N_QUALITY = 13
-
 
 #%% 필요 함수 정의
 def process_errcode(user_id, err_df):
@@ -294,14 +293,12 @@ def transform_fwver(data):
 
 def transform_quality_data(data_type):
     '''
-    quality data의 dataframe에서 array로 변경
+    quality data에서 feature extraction
     '''
     if data_type == 'train':
-        id_list = TRAIN_ID_LIST
-        n_user = N_USER_TRAIN
-    elif data_type == 'test':
-        id_list = TEST_ID_LIST
-        n_user = N_USER_TEST
+        user_id_list = TRAIN_ID_LIST
+    else:
+        user_id_list = TEST_ID_LIST
 
     quality = pd.read_csv(data_path + f'{data_type}_quality_data.csv')
     quality['time'] = pd.to_datetime(quality['time'], format='%Y%m%d%H%M%S')
@@ -312,23 +309,29 @@ def transform_quality_data(data_type):
     drop_idx = np.any(pd.isnull(quality), axis=1)
     quality = quality.loc[~drop_idx,:].reset_index(drop=True)
 
-    # drop -1
-    qual_arr = np.zeros((n_user, 31, N_QUALITY))
-    count_minus_1 = np.zeros((n_user, 31, N_QUALITY), dtype=int)
-    for i, user_id in tqdm(enumerate(id_list)):
-        idx = quality['user_id'] == user_id
-        if idx.sum() == 0:
-            continue
-        quality_sub = quality.loc[idx,:]
-        for j, day in enumerate([31] + list(range(1, 31))): # 10월 31일 처리
-            idx_day = quality_sub['time'].dt.day == day
-            # -1 처리
-            minus_1_idx = quality_sub.loc[idx_day, 'quality_0':'quality_12'] == -1
-            count_minus_1[i, j, :] = minus_1_idx.sum()
-            qual_arr[i, j, :] = np.nansum(quality_sub.loc[idx_day,'quality_0':'quality_12'][~minus_1_idx], axis=0)
-    qual_arr = np.append(qual_arr, count_minus_1, axis=2)
-    # FIXME
-    np.save(f'{data_save_path}{data_type}_quality.npy', qual_arr)
+    group = quality.groupby('user_id')
+    qual_features = pd.DataFrame(index = user_id_list)
+    qual_user_id_list = np.unique(quality['user_id'])
+    for user_id in tqdm(qual_user_id_list):
+        qual = group.get_group(user_id)
+        qual = qual.loc[:,'quality_0':'quality_12']
+        minus_1_idx = qual == -1
+        for i in [1,2,5,6,7,8,9,10,11,12]:
+            qual_features.loc[user_id, f'quality_{i}_minus_1_counts'] = minus_1_idx.sum(axis=0).loc[f'quality_{i}']
+
+        # drop minus 1
+        minus_1_idx_row = np.any(minus_1_idx, axis=1)
+        qual = qual.loc[~minus_1_idx_row,:]
+
+        # feature extraction
+        for i in [1,2,5,6,7,8,9,10,11,12]:
+            qual_features.loc[user_id, f'quality_{i}_mean'] = qual.loc[:, f'quality_{i}'].mean(axis=0)
+            qual_features.loc[user_id, f'quality_{i}_max'] = qual.loc[:, f'quality_{i}'].max(axis=0)
+            qual_features.loc[user_id, f'quality_{i}_med'] = qual.loc[:, f'quality_{i}'].median(axis=0)
+            qual_features.loc[user_id, f'quality_{i}_std'] = np.std(qual.loc[:, f'quality_{i}'], axis=0)
+    qual_features = qual_features.reset_index(drop = True)
+    qual_features = qual_features.fillna(0)
+    return qual_features
 
 
 def transform_error_data(data_type):
@@ -366,7 +369,6 @@ def transform_error_data(data_type):
     np.save(f'{data_save_path}{data_type}_fwvers.npy', fwvers)
 
     # FIXME: save 말고 바로 return으로 바꿔야 함
-
 
 from tsfresh.feature_extraction.feature_calculators \
     import fft_aggregated, fft_coefficient, agg_linear_trend, number_crossing_m, skewness, fourier_entropy, cwt_coefficients, cid_ce, \
@@ -472,7 +474,7 @@ def extract_model_nm(data, id_list):
         else:
             model_downgrade[i] = -1
 
-    model_df = pd.DataFrame(data = model_exist)
+    model_df = pd.DataFrame(data = model_exist, columns = ['model_' + str(i) for i in range(9)])
     model_df['model_diff'] = model_diff
     model_df['model_start'] = pd.Series(model_start, dtype='category')
     model_df['model_end'] = pd.Series(model_end, dtype='category')
@@ -534,9 +536,20 @@ def feature_extraction():
 
     train_err_arr = np.load(f'{data_save_path}train_{errcode_save_name}.npy')
     test_err_arr = np.load(f'{data_save_path}test_{errcode_save_name}.npy')
+    features = ['min', 'max', 'mean', 'median', 'std']
+
+    data_cols = []
+    for feature in features:
+        for i in range(N_NEW_ERRTYPE):
+            data_cols.append('errorcode_' + feature + '_' + str(i))
+        for i in range(N_ERRTYPE):
+            data_cols.append('errortype_' + feature + '_' + str(i))
+        data_cols.append('errortype_38_code_summation_'+feature)
 
     train_err_df = dimension_reduction(train_err_arr, WINDOW=3)
     test_err_df = dimension_reduction(test_err_arr, WINDOW=3)
+    train_err_df.columns = data_cols
+    test_err_df.columns = data_cols
 
     ### 2. extract features from model_nm
     train_models = np.load(f'{data_save_path}train_models.npy')
@@ -551,14 +564,8 @@ def feature_extraction():
     test_fwver_df = extract_fwver(test_fwvers, TEST_ID_LIST)
 
     ### 4.extract features from quality
-    train_qual_arr = np.load(f'{data_save_path}train_quality.npy')
-    test_qual_arr = np.load(f'{data_save_path}test_quality.npy')
-
-    QUAL_WINDOW = 8
-    # train_qual_arr = train_qual_arr[:, :, [0,2,3,4,6,9,11,12]]
-    # test_qual_arr = test_qual_arr[:, :, [0,2,3,4,6,9,11,12]]
-    train_quality_df = dimension_reduction(train_qual_arr, WINDOW=QUAL_WINDOW)
-    test_quality_df = dimension_reduction(test_qual_arr, WINDOW=QUAL_WINDOW)
+    train_quality_df = transform_quality_data('train')
+    test_quality_df = transform_quality_data('test')
 
     ### End. concatenate features
     train_data = pd.concat([train_err_df, train_model_df, train_fwver_df, train_quality_df], axis=1)
@@ -574,7 +581,7 @@ def f_pr_auc(probas_pred, y_true):
     return "pr_auc", score, True
 
 
-def train_model(train_x, train_y, params):
+def train_model(train_x, train_y, params, n_fold):
     '''
     cross validation with given data
     '''
@@ -582,7 +589,7 @@ def train_model(train_x, train_y, params):
     # -------------------------------------------------------------------------------------
     # Kfold cross validation
     models = []
-    k_fold = KFold(n_splits = 5, shuffle=True, random_state=0)
+    k_fold = KFold(n_splits = n_fold, shuffle=True, random_state=0)
     for train_idx, val_idx in k_fold.split(train_x):
         # split train, validation set
         if type(train_x) == pd.DataFrame:
@@ -600,6 +607,7 @@ def train_model(train_x, train_y, params):
         d_train = lgb.Dataset(X, y)
         d_val = lgb.Dataset(valid_x, valid_y)
 
+        params['force_col_wise'] = True
         # run training
         model = lgb.train(
             params,
@@ -614,7 +622,6 @@ def train_model(train_x, train_y, params):
         # cal valid prediction
         valid_prob = model.predict(valid_x)
         valid_probs[val_idx] = valid_prob
-
 
         auc_val = model.best_score['valid_0']['auc']
         models.append(model)
@@ -716,8 +723,7 @@ if __name__ == '__main__':
     '''
     if transform == True:
         for data_type in ['train', 'test']:
-            # transform_error_data(data_type)
-            transform_quality_data(data_type)
+            transform_error_data(data_type)
     print('Transform error and quality data is done')
 
     # %%+
@@ -731,12 +737,6 @@ if __name__ == '__main__':
     # from error and quality data
     train_X, test_X = feature_extraction()
 
-    #%% clustering
-    cols = train_X.columns
-    train_X.columns = range(train_X.shape[1])
-    test_X.columns = range(test_X.shape[1])
-
-    print('Feature extraction is done')
 
     #%%
     '''
@@ -776,43 +776,39 @@ if __name__ == '__main__':
 
         # save the best param
         best_param = sorted(bayes_trials.results, key=lambda k: k['loss'])[0]['params']
-        with open(f'tune_results/0201-local-2.pkl', 'wb') as f:
+        with open(f'tune_results/tmp.pkl', 'wb') as f:
             pickle.dump(bayes_trials.results, f, pickle.HIGHEST_PROTOCOL)
         print('Process 6 Done')
         params = best_param
 
     elif param_select_option == 3:
         from util import load_obj
-        # params = load_obj('0118-2')[0]['params']
-        # params = load_obj('0129-v2-local')[0]['params']
         params = load_obj('0131-local-quality-included')[0]['params']
 
-    models, valid_probs = train_model(train_X, train_y, params)
-
-    # evaluate
-    threshold = 0.5
-    valid_preds = np.where(valid_probs > threshold, 1, 0)
-    recall = recall_score(train_y, valid_preds)
-    precision = precision_score(train_y, valid_preds)
+    models, valid_probs = train_model(train_X, train_y, params, 10)
     auc_score = roc_auc_score(train_y, valid_probs)
-     # validation score
-    print('Validation score is {:.5f}'.format(auc_score))
-    print('Data fitting and evaluation is done')
 
-#%%
-    '''
-    7. stacking
-    '''
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.model_selection import GridSearchCV
+    train_X.to_csv('train_X_fin.csv')
+    test_X.to_csv('test_X_fin.csv')
 
-    blendParams = {}  # test more values in your local machine
-    clf = GridSearchCV(LogisticRegression(solver='lbfgs'), blendParams,
-                       scoring='roc_auc',
-                       refit='True', n_jobs=-1, cv=5)
-    clf.fit(valid_probs.reshape(-1, 1), train_y)
-    print('The Best parameters of the blending model\n{}'.format(clf.best_params_))
-    print('The best score:{}'.format(clf.best_score_))
+#%% ensemble
+    from util import load_obj
+    model_dict = dict()
+    for i in range(5):
+        params = load_obj('0131-local-quality-included')[i]['params']
+        models, valid_probs = train_model(train_X, train_y, params, 10)
+
+        # evaluate
+        threshold = 0.5
+        valid_preds = np.where(valid_probs > threshold, 1, 0)
+        recall = recall_score(train_y, valid_preds)
+        precision = precision_score(train_y, valid_preds)
+        auc_score = roc_auc_score(train_y, valid_probs)
+         # validation score
+        print('Validation score is {:.5f}'.format(auc_score))
+        print('Data fitting and evaluation is done')
+
+        model_dict['model_'+str(i)] = models
 
 
 #%%
@@ -832,42 +828,3 @@ if __name__ == '__main__':
         submission.to_csv("submission.csv", index=False)
         print('Inference is done')
 
-
-#%% dumbs
-    # window_err = np.array([ 6, 11, 11,  1,  1,  5,  6, 14,  1,  1,  5, 22,  0, 28,  4, 25,  0,
-    #    26, 25, 25, 27,  3,  1,  0, 17, 22, 21, 13, 13,  2,  0,  0,  0, 16,
-    #     3,  6,  9, 22,  6,  0, 15, 10,  0,  0,  0,  0, 13,  1,  0, 11, 17,
-    #    26,  3,  1, 22,  1,  1, 14, 13,  1, 15, 17,  0, 11, 13,  3,  6, 25,
-    #     1,  2,  3, 28, 27, 27, 15,  0,  0, 15, 16, 16,  0,  6,  4, 22, 10,
-    #     0, 19, 13, 11,  0, 11,  0,  0,  0,  0, 26,  0,  8, 25,  5, 10, 20,
-    #    11,  6, 24,  0, 11,  1,  1,  5,  3,  1,  5, 21,  0, 26, 27,  3,  1,
-    #     3,  0, 24,  9, 22,  6,  0, 13,  1, 11,  1, 10,  1, 15, 15, 11, 13,
-    #     6,  3,  4, 10]) + 1
-    #
-    # ### 0. load dataset
-    # train_err_df_list, test_err_df_list = [], []
-    # for j in range(train_err_arr.shape[2]):
-    #     ERROR_WINDOW = window_err[j]
-    #     ERROR_WINDOW = 3
-    #     ### 1. extract features based on option
-    #     train_err_df = dimension_reduction(train_err_arr[:,:,j].reshape(N_USER_TRAIN, 30, 1), WINDOW = ERROR_WINDOW)
-    #     test_err_df = dimension_reduction(test_err_arr[:, :, j].reshape(N_USER_TEST, 30, 1), WINDOW = ERROR_WINDOW)
-    #     train_err_df_list.append(train_err_df)
-    #     test_err_df_list.append(test_err_df)
-    # train_err_df = pd.concat(train_err_df_list, axis=1)
-    # test_err_df = pd.concat(test_err_df_list, axis=1)
-
-# window_quals = np.array([10, 5, 10, 0, 0, 22, 26, 23, 5, 10, 23, 16, 4, 9, 9, 9, 0,
-    #                          0, 9, 9, 0, 0, 0, 0, 9, 0]) + 1
-
-    # train_quality_df_list, test_quality_df_list = [], []
-    # for j in range(train_qual_arr.shape[2]):
-    #     QUAL_WINDOW = window_quals[j]
-    #     QUAL_WINDOW = 8
-    #     train_quality_df = dimension_reduction(train_qual_arr[:, :, j].reshape(N_USER_TRAIN, 31, 1),
-    #                                            WINDOW=QUAL_WINDOW)
-    #     test_quality_df = dimension_reduction(test_qual_arr[:, :, j].reshape(N_USER_TEST, 31, 1), WINDOW=QUAL_WINDOW)
-    #     train_quality_df_list.append(train_quality_df)
-    #     test_quality_df_list.append(test_quality_df)
-    # train_quality_df = pd.concat(train_quality_df_list, axis=1)
-    # test_quality_df = pd.concat(test_quality_df_list, axis=1)
