@@ -355,7 +355,6 @@ def transform_error_data(data_type):
         model_list.append(transform_model_nm(data))
         fwver_list.append(transform_fwver(data))
 
-
     # list to array
     err_code = np.array(err_list)
     models = np.array(model_list)
@@ -426,11 +425,13 @@ def dimension_reduction(data, WINDOW): # 임시로는 mean 등이고library 활�
 
 def extract_model_nm(data, id_list):
     model_sorted_order = np.array([4, 1, 0, 2, 8, 5, 3, 7, 6]) + 1
+
     # model_diff flag
     model_diff = np.zeros((len(id_list)), dtype=int)
 
     for i in range(len(id_list)):
-        model_diff[i] = (data[i].sum(axis=0) > 0).sum()
+        model_diff[i] = (data[i].sum(axis=0) > 0).sum() > 1
+
     # model_start flag
     model_start = np.zeros((len(id_list)), dtype=int)
     for i in range(len(id_list)):
@@ -438,11 +439,9 @@ def extract_model_nm(data, id_list):
         if occur_idx.size == 0:
             continue
         first_occur_idx = occur_idx[0]
-        model_class = np.where(data[i][first_occur_idx,:])[0] + 1 # 없는것과 0을 구분하기 위해 1을 더해준다
-        if type(model_class) == np.ndarray:
-            model_start[i] = model_class[0]
-        else:
-            model_start[i] = model_class
+        model_class = np.where(data[i][first_occur_idx,:])[0][0] + 1 # 없는것과 0을 구분하기 위해 1을 더해준다
+        model_start[i] = model_class
+
     # model_end flag
     model_end = np.zeros((len(id_list)), dtype=int)
     for i in range(len(id_list)):
@@ -450,11 +449,9 @@ def extract_model_nm(data, id_list):
         if occur_idx.size == 0:
             continue
         last_occur_idx = occur_idx[-1]
-        model_class = np.where(data[i][last_occur_idx, :])[0] + 1  # 없는것과 0을 구분하기 위해 1을 더해준다
-        if type(model_class) == np.ndarray:
-            model_end[i] = model_class[0]
-        else:
-            model_end[i] = model_class
+        model_class = np.where(data[i][last_occur_idx,:])[0][0] + 1 # 없는것과 0을 구분하기 위해 1을 더해준다
+        model_end[i] = model_class
+
     # model 유무
     model_exist = np.zeros((len(id_list), 9), dtype=int)
     for i in range(len(id_list)):
@@ -481,6 +478,7 @@ def extract_model_nm(data, id_list):
     model_df['model_end'] = pd.Series(model_end, dtype='category')
     model_df['model_upgrade'] = model_upgrade
     model_df['model_downgrade'] = model_downgrade
+
     return model_df
 
 
@@ -524,7 +522,7 @@ def extract_fwver(data, id_list):
     return fwver_df
 
 
-def feature_extraction(ERROR_WINDOW = 3, QUAL_WINDOW = 1):
+def feature_extraction():
     '''
     1. Extract error type
     2. Extract model_nm
@@ -534,13 +532,11 @@ def feature_extraction(ERROR_WINDOW = 3, QUAL_WINDOW = 1):
     1: manually, 2: extract from library, 3. load saved data extracted from library
     '''
 
-    ### 0. load dataset
-    test_err_arr = np.load(f'{data_save_path}test_{errcode_save_name}.npy')
     train_err_arr = np.load(f'{data_save_path}train_{errcode_save_name}.npy')
+    test_err_arr = np.load(f'{data_save_path}test_{errcode_save_name}.npy')
 
-    ### 1. extract features based on option
-    train_err_df = dimension_reduction(train_err_arr, WINDOW = ERROR_WINDOW)
-    test_err_df = dimension_reduction(test_err_arr, WINDOW = ERROR_WINDOW)
+    train_err_df = dimension_reduction(train_err_arr, WINDOW=3)
+    test_err_df = dimension_reduction(test_err_arr, WINDOW=3)
 
     ### 2. extract features from model_nm
     train_models = np.load(f'{data_save_path}train_models.npy')
@@ -555,9 +551,18 @@ def feature_extraction(ERROR_WINDOW = 3, QUAL_WINDOW = 1):
     test_fwver_df = extract_fwver(test_fwvers, TEST_ID_LIST)
 
     ### 4.extract features from quality
+    train_qual_arr = np.load(f'{data_save_path}train_quality.npy')
+    test_qual_arr = np.load(f'{data_save_path}test_quality.npy')
+
+    QUAL_WINDOW = 8
+    # train_qual_arr = train_qual_arr[:, :, [0,2,3,4,6,9,11,12]]
+    # test_qual_arr = test_qual_arr[:, :, [0,2,3,4,6,9,11,12]]
+    train_quality_df = dimension_reduction(train_qual_arr, WINDOW=QUAL_WINDOW)
+    test_quality_df = dimension_reduction(test_qual_arr, WINDOW=QUAL_WINDOW)
+
     ### End. concatenate features
-    train_data = pd.concat([train_err_df, train_model_df, train_fwver_df], axis=1)
-    test_data = pd.concat([test_err_df, test_model_df, test_fwver_df], axis=1)
+    train_data = pd.concat([train_err_df, train_model_df, train_fwver_df, train_quality_df], axis=1)
+    test_data = pd.concat([test_err_df, test_model_df, test_fwver_df, test_quality_df], axis=1)
 
     return train_data, test_data
 
@@ -588,7 +593,7 @@ def train_model(train_x, train_y, params):
             valid_x = train_x[val_idx, :]
         else:
             print('Unknown data type for X')
-            return -1, -1
+            # return -1, -1
         y = train_y[train_idx]
         valid_y = train_y[val_idx]
 
@@ -611,8 +616,7 @@ def train_model(train_x, train_y, params):
         valid_probs[val_idx] = valid_prob
 
 
-        print(model.best_score['valid_0']['auc'])
-
+        auc_val = model.best_score['valid_0']['auc']
         models.append(model)
     return models, valid_probs
 
@@ -636,24 +640,25 @@ class Bayes_tune_model(object):
         self.space = {
             'objective':                'binary',
             'min_child_weight':         hp.quniform('min_child_weight', 1, 10, 1),
-            'learning_rate':            hp.uniform('learning_rate',    0.0001, 0.2),
+            'learning_rate':            hp.uniform('learning_rate',    0.01, 0.02),
             'max_depth':                -1,
-            'num_leaves':               hp.quniform('num_leaves',       5, 200, 1),
-            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 200, 1),	# overfitting 안되려면 높은 값
-            'reg_alpha':                hp.uniform('reg_alpha',0, 1),
-            'reg_lambda':               hp.uniform('reg_lambda',0, 1),
-            'colsample_bytree':         hp.uniform('colsample_bytree', 0.01, 1.0),
-            'colsample_bynode':		    hp.uniform('colsample_bynode',0.01,1.0),
-            'bagging_freq':			    hp.quniform('bagging_freq',	0,20,1),
-            'tree_learner':			    hp.choice('tree_learner',	['serial','feature','data','voting']),
-            'subsample':                hp.uniform('subsample', 0.01, 1.0),
+            'num_leaves':               hp.quniform('num_leaves',       20, 60, 1),
+            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 30, 1),	# overfitting 안되려면 높은 값
+            'reg_alpha':                hp.uniform('reg_alpha',0.3, 0.6),
+            'reg_lambda':               hp.uniform('reg_lambda',0.6,0.8),
+            'colsample_bytree':         hp.uniform('colsample_bytree', 0.1, 0.3),
+            'colsample_bynode':		    hp.uniform('colsample_bynode',0.8,1.0),
+            'bagging_freq':			    hp.quniform('bagging_freq',	2,10,1),
+            'tree_learner':			    hp.choice('tree_learner',	['feature','data','voting']),
+            'subsample':                hp.uniform('subsample', 0.9, 1.0),
             'boosting':			        hp.choice('boosting', ['gbdt']),
-            'max_bin':			        hp.quniform('max_bin',		5,300,1), # overfitting 안되려면 낮은 값
-            "min_sum_hessian_in_leaf":  hp.uniform('min_sum_hessian_in_leaf',       1e-5,1e-1),
+            'max_bin':			        hp.quniform('max_bin',		5,20,1), # overfitting 안되려면 낮은 값
+            "min_sum_hessian_in_leaf":  hp.uniform('min_sum_hessian_in_leaf',       0.01,0.1),
             'random_state':             self.random_state,
             'n_jobs':                   -1,
             'metrics':                  'auc',
             'verbose':                  -1,
+            'force_col_wise':           True,
         }
 
     # optimize
@@ -724,18 +729,9 @@ if __name__ == '__main__':
     3. load saved data extracted from library
     '''
     # from error and quality data
-    ERROR_WINDOW = 3
-    train_error_df, test_error_df = feature_extraction(ERROR_WINDOW = ERROR_WINDOW)
+    train_X, test_X = feature_extraction()
 
-    QUAL_WINDOW = 8
-    train_qual_arr = np.load(f'{data_save_path}train_quality.npy')
-    test_qual_arr = np.load(f'{data_save_path}test_quality.npy')
-    train_quality_df = dimension_reduction(train_qual_arr, WINDOW=QUAL_WINDOW)
-    test_quality_df = dimension_reduction(test_qual_arr, WINDOW=QUAL_WINDOW)
-
-    train_X = pd.concat([train_error_df, train_quality_df], axis=1)
-    test_X = pd.concat([test_error_df, test_quality_df], axis=1)
-
+    #%% clustering
     cols = train_X.columns
     train_X.columns = range(train_X.shape[1])
     test_X.columns = range(test_X.shape[1])
@@ -780,15 +776,16 @@ if __name__ == '__main__':
 
         # save the best param
         best_param = sorted(bayes_trials.results, key=lambda k: k['loss'])[0]['params']
-        with open(f'tune_results/0131-local-quality-included-v2.pkl', 'wb') as f:
+        with open(f'tune_results/0201-local-2.pkl', 'wb') as f:
             pickle.dump(bayes_trials.results, f, pickle.HIGHEST_PROTOCOL)
         print('Process 6 Done')
         params = best_param
 
     elif param_select_option == 3:
         from util import load_obj
-        params = load_obj('0129-local')[0]['params']
+        # params = load_obj('0118-2')[0]['params']
         # params = load_obj('0129-v2-local')[0]['params']
+        params = load_obj('0131-local-quality-included')[0]['params']
 
     models, valid_probs = train_model(train_X, train_y, params)
 
@@ -802,21 +799,21 @@ if __name__ == '__main__':
     print('Validation score is {:.5f}'.format(auc_score))
     print('Data fitting and evaluation is done')
 
-#%% stacking
+#%%
     '''
-        7. stacking
+    7. stacking
     '''
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import GridSearchCV
-
 
     blendParams = {}  # test more values in your local machine
     clf = GridSearchCV(LogisticRegression(solver='lbfgs'), blendParams,
                        scoring='roc_auc',
                        refit='True', n_jobs=-1, cv=5)
-    clf.fit(valid_probs.reshape(-1,1), train_y)
+    clf.fit(valid_probs.reshape(-1, 1), train_y)
     print('The Best parameters of the blending model\n{}'.format(clf.best_params_))
     print('The best score:{}'.format(clf.best_score_))
+
 
 #%%
     '''
@@ -832,5 +829,45 @@ if __name__ == '__main__':
         test_prob = np.mean(test_prob, axis=0)
 
         submission['problem'] = test_prob.reshape(-1)
-        submission.to_csv("submit_17.csv", index=False)
+        submission.to_csv("submission.csv", index=False)
         print('Inference is done')
+
+
+#%% dumbs
+    # window_err = np.array([ 6, 11, 11,  1,  1,  5,  6, 14,  1,  1,  5, 22,  0, 28,  4, 25,  0,
+    #    26, 25, 25, 27,  3,  1,  0, 17, 22, 21, 13, 13,  2,  0,  0,  0, 16,
+    #     3,  6,  9, 22,  6,  0, 15, 10,  0,  0,  0,  0, 13,  1,  0, 11, 17,
+    #    26,  3,  1, 22,  1,  1, 14, 13,  1, 15, 17,  0, 11, 13,  3,  6, 25,
+    #     1,  2,  3, 28, 27, 27, 15,  0,  0, 15, 16, 16,  0,  6,  4, 22, 10,
+    #     0, 19, 13, 11,  0, 11,  0,  0,  0,  0, 26,  0,  8, 25,  5, 10, 20,
+    #    11,  6, 24,  0, 11,  1,  1,  5,  3,  1,  5, 21,  0, 26, 27,  3,  1,
+    #     3,  0, 24,  9, 22,  6,  0, 13,  1, 11,  1, 10,  1, 15, 15, 11, 13,
+    #     6,  3,  4, 10]) + 1
+    #
+    # ### 0. load dataset
+    # train_err_df_list, test_err_df_list = [], []
+    # for j in range(train_err_arr.shape[2]):
+    #     ERROR_WINDOW = window_err[j]
+    #     ERROR_WINDOW = 3
+    #     ### 1. extract features based on option
+    #     train_err_df = dimension_reduction(train_err_arr[:,:,j].reshape(N_USER_TRAIN, 30, 1), WINDOW = ERROR_WINDOW)
+    #     test_err_df = dimension_reduction(test_err_arr[:, :, j].reshape(N_USER_TEST, 30, 1), WINDOW = ERROR_WINDOW)
+    #     train_err_df_list.append(train_err_df)
+    #     test_err_df_list.append(test_err_df)
+    # train_err_df = pd.concat(train_err_df_list, axis=1)
+    # test_err_df = pd.concat(test_err_df_list, axis=1)
+
+# window_quals = np.array([10, 5, 10, 0, 0, 22, 26, 23, 5, 10, 23, 16, 4, 9, 9, 9, 0,
+    #                          0, 9, 9, 0, 0, 0, 0, 9, 0]) + 1
+
+    # train_quality_df_list, test_quality_df_list = [], []
+    # for j in range(train_qual_arr.shape[2]):
+    #     QUAL_WINDOW = window_quals[j]
+    #     QUAL_WINDOW = 8
+    #     train_quality_df = dimension_reduction(train_qual_arr[:, :, j].reshape(N_USER_TRAIN, 31, 1),
+    #                                            WINDOW=QUAL_WINDOW)
+    #     test_quality_df = dimension_reduction(test_qual_arr[:, :, j].reshape(N_USER_TEST, 31, 1), WINDOW=QUAL_WINDOW)
+    #     train_quality_df_list.append(train_quality_df)
+    #     test_quality_df_list.append(test_quality_df)
+    # train_quality_df = pd.concat(train_quality_df_list, axis=1)
+    # test_quality_df = pd.concat(test_quality_df_list, axis=1)
