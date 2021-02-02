@@ -736,6 +736,16 @@ if __name__ == '__main__':
     '''
     # from error and quality data
     train_X, test_X = feature_extraction()
+#%%
+    train_X = pd.read_csv('train_X_fin.csv', index_col=0)
+    test_X = pd.read_csv('test_X_fin.csv', index_col=0)
+    train_label = np.load('train_y.npy')
+
+    train_X['model_start'] = pd.Series(train_X['model_start'], dtype='category')
+    train_X['model_end'] = pd.Series(train_X['model_end'], dtype='category')
+
+    test_X['model_start'] = pd.Series(test_X['model_start'], dtype='category')
+    test_X['model_end'] = pd.Series(test_X['model_end'], dtype='category')
 
 
     #%%
@@ -783,19 +793,20 @@ if __name__ == '__main__':
 
     elif param_select_option == 3:
         from util import load_obj
-        params = load_obj('0131-local-quality-included')[0]['params']
+        # params = load_obj('0131-local-quality-included')[0]['params']
+        params = load_obj('lgb_0202')[0]['params']
 
     models, valid_probs = train_model(train_X, train_y, params, 10)
     auc_score = roc_auc_score(train_y, valid_probs)
 
-    train_X.to_csv('train_X_fin.csv')
-    test_X.to_csv('test_X_fin.csv')
+
 
 #%% ensemble
     from util import load_obj
     model_dict = dict()
-    for i in range(5):
-        params = load_obj('0131-local-quality-included')[i]['params']
+    ens_prob = []
+    for i in range(3):
+        params = load_obj('lgb_0202')[i]['params']
         models, valid_probs = train_model(train_X, train_y, params, 10)
 
         # evaluate
@@ -809,7 +820,11 @@ if __name__ == '__main__':
         print('Data fitting and evaluation is done')
 
         model_dict['model_'+str(i)] = models
+        ens_prob.append(valid_probs)
+#%% ensemble 성능 평가
 
+    roc_auc_score(train_y, ens_prob[0])
+    models = model_dict['model_0']
 
 #%%
     '''
