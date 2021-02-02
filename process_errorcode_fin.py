@@ -329,6 +329,7 @@ def transform_quality_data(data_type):
             qual_features.loc[user_id, f'quality_{i}_max'] = qual.loc[:, f'quality_{i}'].max(axis=0)
             qual_features.loc[user_id, f'quality_{i}_med'] = qual.loc[:, f'quality_{i}'].median(axis=0)
             qual_features.loc[user_id, f'quality_{i}_std'] = np.std(qual.loc[:, f'quality_{i}'], axis=0)
+
     qual_features = qual_features.reset_index(drop = True)
     qual_features = qual_features.fillna(0)
     return qual_features
@@ -581,7 +582,7 @@ def f_pr_auc(probas_pred, y_true):
     return "pr_auc", score, True
 
 
-def train_model(train_x, train_y, params, n_fold):
+def lgb_train_model(train_x, train_y, params, n_fold, fold_rs = 0):
     '''
     cross validation with given data
     '''
@@ -589,7 +590,7 @@ def train_model(train_x, train_y, params, n_fold):
     # -------------------------------------------------------------------------------------
     # Kfold cross validation
     models = []
-    k_fold = KFold(n_splits = n_fold, shuffle=True, random_state=0)
+    k_fold = KFold(n_splits = n_fold, shuffle=True, random_state=fold_rs)
     for train_idx, val_idx in k_fold.split(train_x):
         # split train, validation set
         if type(train_x) == pd.DataFrame:
@@ -624,6 +625,7 @@ def train_model(train_x, train_y, params, n_fold):
         valid_probs[val_idx] = valid_prob
 
         auc_val = model.best_score['valid_0']['auc']
+        print(auc_val)
         models.append(model)
     return models, valid_probs
 
@@ -686,10 +688,61 @@ class Bayes_tune_model(object):
                                      'min_child_weight','bagging_freq','max_bin'])
 
         train_x, train_y = train_set
-        _, valid_probs = train_model(train_x, train_y, params)
+        _, valid_probs = lgb_train_model(train_x, train_y, params)
         best_loss = roc_auc_score(train_y, valid_probs)
         # Dictionary with information for evaluation
         return {'loss': -best_loss, 'params': params, 'status': STATUS_OK}
+
+
+def cat_train_model(train_x, train_y, params, NFOLD):
+    '''
+    cross validation with given data
+    '''
+    valid_probs = np.zeros((train_y.shape))
+    models = []
+    # -------------------------------------------------------------------------------------
+    # Kfold cross validation
+    k_fold = KFold(n_splits=NFOLD, shuffle=True, random_state=0)
+    for train_idx, val_idx in k_fold.split(train_x):
+        # split train, validation set
+        if type(train_x) == pd.DataFrame:
+            X = train_x.iloc[train_idx, :]
+            valid_x = train_x.iloc[val_idx, :]
+        elif type(train_x) == np.ndarray:
+            X = train_x[train_idx, :]
+            valid_x = train_x[val_idx, :]
+        else:
+            print('Unknown data type for X')
+            # return -1, -1
+        y = train_y[train_idx]
+        valid_y = train_y[val_idx]
+
+        from catboost import CatBoostClassifier, Pool
+        train_dataset = Pool(data=X,
+                     label=y,
+                     cat_features=['model_start','model_end'])
+
+        valid_dataset = Pool(data=valid_x,
+                     label=valid_y,
+                     cat_features=['model_start','model_end'])
+
+        cbm_clf = CatBoostClassifier(**params)
+
+        cbm_clf.fit(train_dataset,
+            eval_set=valid_dataset,
+            verbose=False,
+            plot=False,
+        )
+
+        # cal valid prediction
+        valid_prob = cbm_clf.predict_proba(valid_x)
+        valid_probs[val_idx] = valid_prob[:,1]
+        models.append(cbm_clf)
+
+    # cv score
+    auc_score = roc_auc_score(train_y, valid_probs)
+    print(auc_score)
+    return models, valid_probs
 
 
 #%% main문
@@ -757,74 +810,40 @@ if __name__ == '__main__':
     train_y[train_prob.user_id.unique() - 10000] = 1
     print('Make label data is done')
 
+
+
+#%%
     '''
     6. fit
     '''
-    param_select_option = input('Param: (1) default, (2) bayes opt, (3) previous best param')
-    param_select_option = int(param_select_option)
-    # param_select_option = 1
-    if param_select_option == 1:
-        params = {
-            'boosting_type': 'gbdt',
-            'objective': 'binary',
-            'metric': 'auc',
-            'seed': 1015,
-            'verbose': 0,
-        }
-
-    elif param_select_option == 2:
-        MAX_EVALS = input('Number of iteration for tuning')
-        MAX_EVALS = int(MAX_EVALS)
-        # MAX_EVALS = 2500
-
-        bayes_trials = Trials()
-        obj = Bayes_tune_model()
-        tuning_algo = tpe.suggest  # -- bayesian opt
-        # tuning_algo = tpe.rand.suggest # -- random search
-        obj.process('lgb', [train_X, train_y],
-                    bayes_trials, tuning_algo, MAX_EVALS)
-
-        # save the best param
-        best_param = sorted(bayes_trials.results, key=lambda k: k['loss'])[0]['params']
-        with open(f'tune_results/tmp.pkl', 'wb') as f:
-            pickle.dump(bayes_trials.results, f, pickle.HIGHEST_PROTOCOL)
-        print('Process 6 Done')
-        params = best_param
-
-    elif param_select_option == 3:
-        from util import load_obj
-        # params = load_obj('0131-local-quality-included')[0]['params']
-        params = load_obj('lgb_0202')[0]['params']
-
-    models, valid_probs = train_model(train_X, train_y, params, 10)
-    auc_score = roc_auc_score(train_y, valid_probs)
-
-
-
-#%% ensemble
     from util import load_obj
+
+    params = load_obj('lgb_0202')[0]['params']
+    models_1, valid_probs_1 = lgb_train_model(train_X, train_y, params, 10)
+    auc_score = roc_auc_score(train_y, valid_probs_1)
+    print(auc_score)
+
+    params = load_obj('cat_0202_server_2')[0]['params']
+    models_2, valid_probs_2 = cat_train_model(train_X, train_y, params, 10)
+    auc_score = roc_auc_score(train_y, valid_probs_2)
+    print(auc_score)
+
+    #%%
+    roc_auc_score(train_y, valid_probs_2 * 0.4 + valid_probs_1 * 0.6)
+
+#%%
     model_dict = dict()
-    ens_prob = []
-    for i in range(3):
+    valid_prob_dict = dict()
+
+    for i in range(0,3):
         params = load_obj('lgb_0202')[i]['params']
-        models, valid_probs = train_model(train_X, train_y, params, 10)
+        models_1, valid_probs_1 = lgb_train_model(train_X, train_y, params, 10, 0)
+        model_dict[f'lgb_models_{i}'] = models_1
+        valid_prob_dict[f'lgb_valid_prob_{i}'] = valid_probs_1
 
-        # evaluate
-        threshold = 0.5
-        valid_preds = np.where(valid_probs > threshold, 1, 0)
-        recall = recall_score(train_y, valid_preds)
-        precision = precision_score(train_y, valid_preds)
-        auc_score = roc_auc_score(train_y, valid_probs)
-         # validation score
-        print('Validation score is {:.5f}'.format(auc_score))
-        print('Data fitting and evaluation is done')
 
-        model_dict['model_'+str(i)] = models
-        ens_prob.append(valid_probs)
-#%% ensemble 성능 평가
-
-    roc_auc_score(train_y, ens_prob[0])
-    models = model_dict['model_0']
+#%%
+    roc_auc_score(train_y, valid_prob_dict[f'lgb_valid_prob_0'])
 
 #%%
     '''
@@ -834,12 +853,18 @@ if __name__ == '__main__':
         submission = pd.read_csv(data_path + '/sample_submission.csv')
 
         # predict
-        test_prob = []
-        for model in models:
-            test_prob.append(model.predict(test_X))
-        test_prob = np.mean(test_prob, axis=0)
+        test_prob_1 = []
+        for model in models_1:
+            test_prob_1.append(model.predict(test_X))
+        test_prob_1 = np.mean(test_prob_1, axis=0)
+
+        test_prob_2 = []
+        for model in models_2:
+            test_prob_2.append(model.predict(test_X))
+        test_prob_2 = np.mean(test_prob_2, axis=0)
+
+        test_prob = test_prob_1 * 0.6 + test_prob_2 * 0.4
 
         submission['problem'] = test_prob.reshape(-1)
         submission.to_csv("submission.csv", index=False)
         print('Inference is done')
-
