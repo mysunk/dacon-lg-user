@@ -789,6 +789,7 @@ if __name__ == '__main__':
     '''
     # from error and quality data
     train_X, test_X = feature_extraction()
+
 #%%
     train_X = pd.read_csv('train_X_fin.csv', index_col=0)
     test_X = pd.read_csv('test_X_fin.csv', index_col=0)
@@ -811,7 +812,6 @@ if __name__ == '__main__':
     print('Make label data is done')
 
 
-
 #%%
     '''
     6. fit
@@ -819,7 +819,7 @@ if __name__ == '__main__':
     from util import load_obj
 
     params = load_obj('lgb_0202')[0]['params']
-    models_1, valid_probs_1 = lgb_train_model(train_X, train_y, params, 10)
+    models_1, valid_probs_1 = lgb_train_model(train_X, train_y, params, 5)
     auc_score = roc_auc_score(train_y, valid_probs_1)
     print(auc_score)
 
@@ -837,13 +837,12 @@ if __name__ == '__main__':
 
     for i in range(0,3):
         params = load_obj('lgb_0202')[i]['params']
-        models_1, valid_probs_1 = lgb_train_model(train_X, train_y, params, 10, 0)
+        models_1, valid_probs_1 = lgb_train_model(train_X, train_y, params, 5, 0)
         model_dict[f'lgb_models_{i}'] = models_1
         valid_prob_dict[f'lgb_valid_prob_{i}'] = valid_probs_1
 
-
 #%%
-    roc_auc_score(train_y, valid_prob_dict[f'lgb_valid_prob_0'])
+    roc_auc_score(train_y, (valid_prob_dict[f'lgb_valid_prob_0'] + valid_prob_dict[f'lgb_valid_prob_1'] + valid_prob_dict[f'lgb_valid_prob_2'])/3)
 
 #%%
     '''
@@ -852,19 +851,17 @@ if __name__ == '__main__':
     if infer == True:
         submission = pd.read_csv(data_path + '/sample_submission.csv')
 
-        # predict
-        test_prob_1 = []
-        for model in models_1:
-            test_prob_1.append(model.predict(test_X))
-        test_prob_1 = np.mean(test_prob_1, axis=0)
+        ens = []
+        for i in range(3):
+            models = model_dict[f'lgb_models_{i}']
+            # predict
+            test_prob_1 = []
+            for model in models:
+                test_prob_1.append(model.predict(test_X))
+            test_prob_1 = np.mean(test_prob_1, axis=0)
+            ens.append(test_prob_1)
 
-        test_prob_2 = []
-        for model in models_2:
-            test_prob_2.append(model.predict(test_X))
-        test_prob_2 = np.mean(test_prob_2, axis=0)
-
-        test_prob = test_prob_1 * 0.6 + test_prob_2 * 0.4
-
+        test_prob = np.mean(ens, axis=0)
         submission['problem'] = test_prob.reshape(-1)
-        submission.to_csv("submission.csv", index=False)
+        submission.to_csv("submit_22.csv", index=False)
         print('Inference is done')
