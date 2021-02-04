@@ -103,6 +103,6 @@ if e == 1:
 * test_err_data는 학습 데이터의 인코더를 사용하여 변환함
 
 #### 2-2-2. 데이터 transformation
-
+![img1](img/img1.PNG)
 
 ### 2-3. Model_nm과 fwver
