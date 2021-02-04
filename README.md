@@ -67,7 +67,7 @@ Out[4]:
 ```
 
 ### 2-2. Error type과 code
-#### 2-2-1. 새로운 Error code 생성
+#### 2-2-0. 새로운 Error code 생성
 * Error type: 1~42까지 중 29를 제외한 41개가 존재
 * Error code: 각 type별로 다양하게 존재
 * Error type을 비슷한 유형끼리 묶게 되면 성능이 크게 감소하는데, 반대로 type을 세분화하는 code를 활용하는 것이 유의미할 것이라 판단함
@@ -105,15 +105,68 @@ if e == 1:
 * train_err_data를 generate_new_errcode 함수에 입력하여 새로운 error code 조합을 생성하고 이것을 인코딩
 * test_err_data는 학습 데이터의 인코더를 사용하여 변환함
 
-#### 2-2-2. 데이터 transformation
-* transform_errtype 함수를 이용해 각 user, day마다의 error dataframe을 array 형태로 변경
+#### 2-2-1. 데이터 transformation
+* transform_errtype 함수를 이용해 각 user, day마다의 error dataframe을 error array 형태로 변경
 * 이 때, error type과 code는 일별 발생 횟수를 집계함
 * 예외로 error type 38의 error code는 numeric value라 판단하여 발생 횟수가 아닌 code 숫자의 합계에 대한 피쳐 생성
+* error type (42가지) + error code (x가지) + error 38 관련 피쳐 1가지로, (user id 수) x (30) x (x) 형태의 array 반환
 
-#### 2-2-3. Feature extraction
-* extract_err 함수를 통해 일별 데이터를 아래 그림과 같이 WINDOW마다 summation하여 피쳐를 생성함 
-
+#### 2-2-2. Feature extraction
+* extract_err 함수를 통해 피쳐를 생성함
+    1. 일별 데이터를 아래 그림과 같이 WINDOW마다 summation 
 ![img1](img/img1.jpg)
+    2. 각 error에 대하여 차원 축소를 위해 5가지의 통계적 특징 추출 (mean, max, min, median, standard deviavion)
+* extract_err 함수는 (userid 수) x (error type 수 + error code 수 + 1) 의 형태를 가진 dataframe을 반환함
 
+### 2-3. Model_nm
+#### 2-2-1. 데이터 transformation
+* transform_model_nm 함수를 이용해 각 user, day마다 error dataframe을 model_nm array 형태로 변경
+* 이 때, 요일별로 어떤 model_nm이었는지 저장
 
-### 2-3. Model_nm과 fwver
+#### 2-2-2. Feature extraction
+* extract_model_nm 함수를 통해 피쳐를 생성하였고 각각에 대한 설명은 다음과 같음
+
+|Feature|Explanation|
+|------|------|
+|model_exist|0~8 model_nm 사용 유무에 대한 flag|
+|model_diff|30일 내에 유저의 model_nm이 변경되었는지에 대한 flag|
+|model_upgrade|model_nm 업그레이드 유무에 대한 flag|
+|model_downgrade|model_nm 다운그레이드 유무에 대한 flag|
+|model_start|유저가 가장 처음에 사용한 model_nm에 대한 범주형 변수|
+|model_end|유저가 가장 마지막 사용한 model_nm에 대한 범주형 변수|
+
+* upgrade 및 downgrade는 model 번호가 아닌 fwver을 기준으로 판단하였으며 그에 따른 순서는 아래 표와 같음
+
+|model_nm|fwver|order|
+|------|------|------|
+|0|04.22.x|3|
+|1|04.16.x|2|
+|2|04.33.x|4|
+|3|05.15.x|7|
+|4|03.11.x|1|
+|5|04.82.x|6|
+|6|10 / 8.5.3|9|
+|7|05.66.x|8|
+|8|04.73.x|5|
+
+### 2-4. fwver
+#### 2-2-1. 데이터 transformation
+* transform_fwver 함수를 이용해 각 user, day마다 error dataframe을 fwver array 형태로 변경
+* 이 때, 요일별로 어떤 fwver였는지 저장
+* fwver이 x. y. z의 형태이므로 이 3가지를 분리하여 저장
+
+#### 2-2-2. Feature extraction
+* extract_fwver 함수를 통해 피쳐를 생성하였고 각각에 대한 설명은 다음과 같음
+* 피쳐의 특성은 model_nm과 유사함
+* fwver의 x. y. z 중 x만 사용하였으며 나머지 자리는 유의미한 모델 성능 향상을 보이지 않아 제외함
+
+|Feature|Explanation|
+|------|------|
+|fwver_diff|30일 내에 유저의 fwver이 변경되었는지에 대한 flag|
+|fwver_upgrade|fwver 업그레이드 유무에 대한 flag|
+|fwver_downgrade|fwver 다운그레이드 유무에 대한 flag|
+|fwver_start|유저가 가장 처음에 사용한 fwver에 대한 범주형 변수|
+|fwver_end|유저가 가장 마지막 사용한 fwver에 대한 범주형 변수|
+
+### 2-5. 피쳐 통합
+* 2-1 ~ 2-4에서 생성된 피쳐의 통합은 feature_extraction 함수에서 이루어짐
