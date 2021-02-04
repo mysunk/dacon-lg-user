@@ -91,6 +91,7 @@ Out[4]:
     2. 예시로, Error type 38번에 경우 error code가 5000개 이상 존재해 개별적으로 사용할 경우 복잡도가 지나치게 커짐
 * 따라서 빈도수가 높은 Error code만 남겨 type과 조합하고 그 외에는 UNKNOWN으로 처리하여 학습에 제외
 * 해당 작업은 process_errcode 함수에서 진행되며 예시로 error type 1에 대한 처리는 다음과 같음
+* 0, P로 시작하는 code, 0 이외의 숫자, UNKNOWN의 4가지 유형으로 분류하여 새로운 code 생성함
 ```python
 if e == 1:
     for i, ec in enumerate(errcode):
@@ -104,8 +105,7 @@ if e == 1:
             print(f'Unknown error code for error type {e}')
             new_errcode[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
 ```
-* train_err_data의 error type 1의 error code 종류와 processing 결과는 다음과 같음
-* 0, P로 시작하는 code, 0 이외의 숫자, UNKNOWN의 4가지 유형으로 분류하여 새로운 code 생성함
+* 모든 error type에 대한 processing 결과를 표로 정리하면 다음과 같음
 
 |error type|error code|processed errror code|
 |------|------|------|
@@ -114,11 +114,22 @@ if e == 1:
 |1|P-41007|1-P|
 |1|P-41010|1-P|
 |1|P-41011|1-P|
-|1|100|1-num|
-|1|others|1-UNKNOWN|
+|1|any digit|1-num|
+|5|Y, V, U, S, Q, P, M, J, H, E, D, C, B|5-(corresponding alphabet)|
+|5|any digit|5-num|
+|8|any digit|8-num|
+|8|Phoe err or public err|8-(corresponding error code)|
+|9|any digit|9-num|
+|9|C, V|9-(corresponding alphabet)|
+|25|fail, timeout, cancel, terminate|25-(corresponding error code)|
+|32|negative number|32-neg|
+|32|positive number|32-pos|
+|other error types|for each error code|(error type number)-(corresponding error code)|
+|for all error types|Unknown error code|(error type number)-UNKNOWN|
 
 * train_err_data를 generate_new_errcode 함수에 입력하여 새로운 error code 조합을 생성하고 이것을 인코딩
 * test_err_data는 학습 데이터의 인코더를 사용하여 변환함
+* UNKNOWN이 포함된 code는 집계하지 않음
 
 #### 2-2-1. Transform data
 * transform_errtype 함수를 이용해 각 user, day마다의 error dataframe을 error array 형태로 변경
