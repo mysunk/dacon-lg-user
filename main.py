@@ -19,7 +19,8 @@ N_ERRTYPE = 42
 N_QUALITY = 13
 
 
-# %% 필요 함수 정의
+# %% error type과 code를 조합하여 새로운 error type 생성
+from sklearn.preprocessing import LabelEncoder
 
 def process_errcode(errortype, errorcode):
     """
@@ -156,6 +157,22 @@ def generate_new_errcode():
 
     return new_errcode
 
+new_errcode_tmp = generate_new_errcode()
+
+new_errcode = []
+# Unknown 제거
+for err in new_errcode_tmp:
+    if 'UNKNOWN' not in err:
+        new_errcode.append(err)
+N_NEW_ERRCODE = len(new_errcode)
+
+# 새로운 error type을 encoding
+encoder = LabelEncoder()
+encoder.fit(new_errcode)
+print('Encoding error code is done')
+
+
+# %% X, y 생성
 
 def split_error_data_in_day(data_type):
     """
@@ -631,25 +648,6 @@ def feature_extraction(data_type):
     return transformed_data
 
 
-# %% error type과 code를 조합하여 새로운 error type 생성
-from sklearn.preprocessing import LabelEncoder
-
-new_errcode_tmp = generate_new_errcode()
-
-new_errcode = []
-# Unknown 제거
-for err in new_errcode_tmp:
-    if 'UNKNOWN' not in err:
-        new_errcode.append(err)
-N_NEW_ERRCODE = len(new_errcode)
-
-# 새로운 error type을 encoding
-encoder = LabelEncoder()
-encoder.fit(new_errcode)
-print('Encoding error code is done')
-
-
-# %% X, y 생성
 # X 생성
 print('Feature extraction from train data start')
 train_X = feature_extraction('train')
@@ -724,8 +722,8 @@ def lgb_train_model(train_x, train_y, params, n_fold, fold_rs=0):
         y = train_y[train_idx]
         valid_y = train_y[val_idx]
 
-        d_train = lgb.Dataset(X, y)
-        d_val = lgb.Dataset(valid_x, valid_y)
+        d_train = lgb.Dataset(X, y, categorical_feature=['model_start','model_end'])
+        d_val = lgb.Dataset(valid_x, valid_y, categorical_feature=['model_start','model_end'])
 
         # run training
         model = lgb.train(
@@ -827,7 +825,6 @@ lgb_param = {
     'max_bin': 5,
     'n_jobs': 6,
     'num_leaves': 40,
-
 }
 
 cat_param = {
@@ -842,22 +839,38 @@ cat_param = {
     'depth': 7,
     'iterations': 816,
     'l2_leaf_reg': 47,
-    'thread_count': 6
+    'thread_count': 48
 }
 
-print('Lightgbm model fitting...')
-models_lgb, valid_probs_lgb = lgb_train_model(train_X, train_y, lgb_param, 10)
-auc_score_lgb = roc_auc_score(train_y, valid_probs_lgb)
+valid_probs_lgb_list = []
+for i in range(10):
+    # k-fold cross validation의 random state를 바꿔가며 앙상블
+    models_lgb, valid_probs_lgb = lgb_train_model(train_X, train_y, lgb_param, n_fold = 10, fold_rs=i)
+    valid_probs_lgb_list.append(valid_probs_lgb)
+auc_score_lgb = roc_auc_score(train_y, np.mean(valid_probs_lgb_list, axis=0))
 print('Lightgbm validation score:: {:.5f}'.format(auc_score_lgb))
+valid_probs_lgb = np.mean(valid_probs_lgb_list, axis=0)
 
 print('Catboost model fitting...')
-models_cat, valid_probs_cat = cat_train_model(train_X, train_y, cat_param, 10)
-auc_score_cat = roc_auc_score(train_y, valid_probs_cat)
+valid_probs_cat_list = []
+for i in range(10):
+    # k-fold cross validation의 random state를 바꿔가며 앙상블
+    models_cat, valid_probs_cat = cat_train_model(train_X, train_y, cat_param, n_fold = 10, fold_rs=i)
+    valid_probs_cat_list.append(valid_probs_cat)
+auc_score_cat = roc_auc_score(train_y, np.mean(valid_probs_cat_list, axis=0))
 print('Catboost validation score:: {:.5f}'.format(auc_score_cat))
+valid_probs_cat = np.mean(valid_probs_cat_list, axis=0)
 
-auc_score_ens = roc_auc_score(train_y, valid_probs_lgb * 0.6 + valid_probs_cat * 0.4)
-print('Ensemble validation score:: {:.5f}'.format(auc_score_ens))
+# lightgbm 모델과 catboost 모델을 앙상블
+# 앙상블 weight 조정
+auc_score_ens_list = []
+for i in range(0, 11):
+    auc_score_ens = roc_auc_score(train_y, valid_probs_lgb * (0.1 * i) + valid_probs_cat * (1 - (0.1 * i)))
+    auc_score_ens_list.append(auc_score_ens)
+print('Ensemble validation score:: {:.5f}'.format(np.max(auc_score_ens_list)))
 
+i = np.argmax(auc_score_ens_list)
+weight = [0.1 * i, (1 - (0.1 * i))]
 
 # %% Inference
 print('Inference for test dataset...')
@@ -876,13 +889,9 @@ for model in models_cat:
     test_prob_cat.append(model.predict(test_X))
 test_prob_cat = np.mean(test_prob_cat, axis=0)
 
-test_prob = test_prob_lgb * 0.6 + test_prob_cat * 0.4
+test_prob = test_prob_lgb * weight[0] + test_prob_cat * weight[1]
 
 submission['problem'] = test_prob.reshape(-1)
 submission.to_csv("submission.csv", index=False)
 
 print('Inference is done')
-
-
-#%%
-train_X_prev = pd.read_csv('train_X_fin.csv', index_col=0)
