@@ -3,9 +3,11 @@
 * 팀명: asdf
 * 팀원: 김명선, 이지훈
 
+
 ## 목차
 1. 라이브러리 및 데이터
 2. error 데이터를 활용한 피쳐 추출
+
 
 ## 1. 라이브러리 및 개발 환경
 * 사용 library 및 version:  
@@ -20,6 +22,7 @@
 |tqdm|4.54.0|
 
 * 개발 환경: Windows 10 64비트
+
 
 ## 2. error 데이터를 활용한 피쳐 추출
 ### 2-1. 데이터 일별 분리
@@ -103,6 +106,14 @@ if e == 1:
 * test_err_data는 학습 데이터의 인코더를 사용하여 변환함
 
 #### 2-2-2. 데이터 transformation
-![img1](img/img1.PNG)
+* transform_errtype 함수를 이용해 각 user, day마다의 error dataframe을 array 형태로 변경
+* 이 때, error type과 code는 일별 발생 횟수를 집계함
+* 예외로 error type 38의 error code는 numeric value라 판단하여 발생 횟수가 아닌 code 숫자의 합계에 대한 피쳐 생성
+
+#### 2-2-3. Feature extraction
+* extract_err 함수를 통해 일별 데이터를 아래 그림과 같이 WINDOW마다 summation하여 피쳐를 생성함 
+
+![img1](img/img1.jpg)
+
 
 ### 2-3. Model_nm과 fwver
