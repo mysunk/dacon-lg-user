@@ -4,8 +4,8 @@
 
 
 ## 목차
-1. 라이브러리 및 데이터  
-2. error 데이터를 활용한 피쳐 추출  
+[1.](#1-라이브러리-및-개발-환경) 라이브러리 및 개발 환경  
+[2.](#2-error-데이터를-활용한-피쳐-추출) error 데이터를 활용한 피쳐 추출  
     2-1. 데이터 일별 분리  
     2-2. Error type과 code  
         2-2-0. 새로운 Error code 생성  
@@ -17,12 +17,12 @@
     2-4. fwver  
         2-4-1. Transform data  
         2-4-2. Extract feature from fwver  
-3. quality 데이터를 활용한 피쳐 추출  
+[3.](#3-quality-데이터를-활용한-피쳐-추출)quality 데이터를 활용한 피쳐 추출  
     3-1. Filter quality  
     3-2. Extract feature from quality  
-4. 피쳐 통합  
-5. 모델 학습  
-6. 결과  
+[4.](#4-피쳐-통합) 피쳐 통합  
+[5.](#5-모델-학습) 모델 학습  
+[6.](#6-결과) 결과  
 
 ## 1. 라이브러리 및 개발 환경
 * 사용 library 및 version:  
@@ -111,11 +111,10 @@ if e == 1:
 |------|------|------|
 |1|0|1-0|
 |1|P-41001|1-P|
-|1|P-41007|1-P|
 |1|P-41010|1-P|
 |1|P-41011|1-P|
 |1|any digit|1-num|
-|5|Y, V, U, S, Q, P, M, J, H, E, D, C, B|5-(corresponding alphabet)|
+|5|starting with Y, V, U, S, Q, P, M, J, H, E, D, C, B|5-(corresponding character)|
 |5|any digit|5-num|
 |8|any digit|8-num|
 |8|Phoe err or public err|8-(corresponding error code)|
