@@ -1,7 +1,6 @@
 # [DACON] 시스템 품질 변화로 인한 사용자 불편 예지 AI 경진대회
 * 제출일: 2020-02-07
 * 팀명: asdf
-* 팀원: 김명선, 이지훈
 
 
 ## 목차
@@ -114,7 +113,7 @@ if e == 1:
 #### 2-2-2. Feature extraction
 * extract_err 함수를 통해 피쳐를 생성함
     1. 일별 데이터를 아래 그림과 같이 WINDOW마다 summation 
-![img1](img/img1.jpg)
+![img1](img/img1.png)
     2. 각 error에 대하여 차원 축소를 위해 5가지의 통계적 특징 추출 (mean, max, min, median, standard deviavion)
 * extract_err 함수는 (userid 수) x (error type 수 + error code 수 + 1) 의 형태를 가진 dataframe을 반환함
 
@@ -169,4 +168,4 @@ if e == 1:
 |fwver_end|유저가 가장 마지막 사용한 fwver에 대한 범주형 변수|
 
 ### 2-5. 피쳐 통합
-* 2-1 ~ 2-4에서 생성된 피쳐의 통합은 feature_extraction 함수에서 이루어짐
+* 2-1 ~ 2-4에서 생성된 피쳐의 통합은
