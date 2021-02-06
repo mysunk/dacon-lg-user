@@ -3,15 +3,12 @@
 * 팀명: asdf
 
 * 사용 library 및 version:  
-
-|Library|Version|
-|------|------|
-|pandas|1.1.4|
-|numpy|1.19.2|
-|scikit-learn|0.24.0|
-|lightgbm|3.1.1|
-|catboost|0.24.4|
-|tqdm|4.54.0|
+    > pandas == 1.1.4  
+     numpy ==1.19.2  
+     scikit-learn == 0.24.0  
+     lightgbm == 3.1.1  
+     catboost == 0.24.4  
+     tqdm == 4.54.0  
 
 * 개발 환경: Windows 10 64비트
 
