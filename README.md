@@ -37,6 +37,7 @@
 └── file1.ipynb # Error 데이터 분석 파일
 └── file2.ipynb # quality 데이터 분석 파일
 └── file2.ipynb # 사용자 불만 제기 원인 분석 파일
+└── img/ # README에 포함된 이미지를 저장한 디렉토리
 ```
 
 ## 2. Error 데이터를 활용한 피쳐 추출
