@@ -29,6 +29,15 @@
 ## 1. Overview
 ![img2](img/flow_chart.png)
 * 사용된 데이터와 함수의 관계는 위와 같음
+* 본 README.md 에서는 main.py 함수에 대한 설명만을 담았으며 프로젝트에 포함된 파일은 다음과 같음
+```setup
+.
+└── main.py # 메인 파일
+└── README.md # main.py의 코드 설명 파일
+└── file1.ipynb # Error 데이터 분석 파일
+└── file2.ipynb # quality 데이터 분석 파일
+└── file2.ipynb # 사용자 불만 제기 원인 분석 파일
+```
 
 ## 2. Error 데이터를 활용한 피쳐 추출
 ### 2-1. 데이터 일별 분리 (func split_error_data_in_day)
