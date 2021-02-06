@@ -2,29 +2,6 @@
 * 제출일: 2020-02-07
 * 팀명: asdf
 
-
-## 목차
-1. 라이브러리 및 개발 환경  
-2. error 데이터를 활용한 피쳐 추출  
-    2-1. 데이터 일별 분리  
-    2-2. Error type과 code  
-        2-2-0. 새로운 Error code 생성  
-        2-2-1. Transform data  
-        2-2-2. Extract feature from error  
-    2-3. Model_nm  
-        2-3-1. Transform data  
-        2-3-2. Extract feature from model_nm  
-    2-4. fwver  
-        2-4-1. Transform data  
-        2-4-2. Extract feature from fwver  
-3. quality 데이터를 활용한 피쳐 추출  
-    3-1. Filter quality  
-    3-2. Extract feature from quality  
-4. 피쳐 통합  
-5. 모델 학습  
-6. 결과  
-
-## 1. 라이브러리 및 개발 환경
 * 사용 library 및 version:  
 
 |Library|Version|
@@ -38,32 +15,31 @@
 
 * 개발 환경: Windows 10 64비트
 
+## 목차
+1. Overview
+2. Error 데이터를 활용한 피쳐 추출  
+    2-1. 데이터 일별 분리  
+    2-2. Error type과 code  
+    2-3. Model_nm  
+    2-4. fwver  
+3. quality 데이터를 활용한 피쳐 추출  
+    3-1. Filter quality  
+    3-2. Extract feature from quality  
+4. 피쳐 통합  
+5. 모델 학습  
+6. 결과  
 
-## 2. error 데이터를 활용한 피쳐 추출
-### 2-1. 데이터 일별 분리
+## 1. Overview
+![img2](img/flow_chart.png)
+* 사용된 데이터와 함수의 관계는 위와 같음
+
+## 2. Error 데이터를 활용한 피쳐 추출
+### 2-1. 데이터 일별 분리 (func split_error_data_in_day)
 * error 데이터는 **time, fwver, model_nm, errtype, errcode**를 포함하고 있음
-* 원본 데이터는 에러가 발생할 때마다 log가 찍혀 있는데 이를 일별로 변경하는 전처리 진행
-* 해당 작업은 split_error_data_in_day 함수에서 진행되며 input과 output은 다음과 같음
-```python
-def split_error_data_in_day(err_df, data_type):
-    """
-    원본 error_data를 불러와 일별 데이터로 분리
-
-    [Input]
-    err_df: train or test error data
-    data_type: train or test 지정
-
-    [Output]
-    err_df_in_day_user: user id별 일별 error data
-    """
-    
-    # 코드 생략
-
-    return err_df_in_day_user
-``` 
-* return variable인 err_df_in_day_user는 각 user의 데이터를 저장하고 있는 list
+* 원본 데이터는 에러가 발생할 때마다 log가 찍혀 있는데 이를 일별로 분리
+* split_error_data_in_day 함수의 return값인 err_df_in_day_user는 각 user의 데이터를 저장하고 있는 list
 * 각각의 list는 1일~30일까지의 day index를 key로 갖고 해당하는 error dataframe을 value로 갖는 dictionary를 저장하고 있음 
-* 예시로 user id 10000의 day 1이 저장하고 있는 데이터는 다음과 같음 
+* 예시로 user id 10000의 day 1이 저장하고 있는 데이터는 다음과 같음
 ```ipynb
 Out[4]: 
    model_nm       fwver  errtype errcode
@@ -82,7 +58,7 @@ Out[4]:
 ```
 
 ### 2-2. Error type과 code
-#### 2-2-0. 새로운 Error code 생성
+#### 2-2-0. 새로운 Error code 생성 (func process_errcode)
 * Error type: 1~42까지 중 29를 제외한 41개가 존재
 * Error code: 각 type별로 다양하게 존재
 * Error type을 비슷한 유형끼리 묶게 되면 성능이 크게 감소하는데, 반대로 type을 세분화하는 code를 활용하는 것이 유의미할 것이라 판단함
@@ -105,6 +81,7 @@ if e == 1:
             print(f'Unknown error code for error type {e}')
             new_errcode[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
 ```
+* 상기 code snippet으로 처리된 error code processing 결과는 아래 표와 같음
 * 모든 error type에 대한 processing 결과를 표로 정리하면 다음과 같음
 
 |error type|error code|processed errror code|
@@ -114,30 +91,19 @@ if e == 1:
 |1|P-41010|1-P|
 |1|P-41011|1-P|
 |1|any digit|1-num|
-|5|starting with Y, V, U, S, Q, P, M, J, H, E, D, C, B|5-(corresponding character)|
-|5|any digit|5-num|
-|8|any digit|8-num|
-|8|Phoe err or public err|8-(corresponding error code)|
-|9|any digit|9-num|
-|9|C, V|9-(corresponding alphabet)|
-|25|fail, timeout, cancel, terminate|25-(corresponding error code)|
-|32|negative number|32-neg|
-|32|positive number|32-pos|
-|other error types|for each error code|(error type number)-(corresponding error code)|
-|for all error types|Unknown error code|(error type number)-UNKNOWN|
 
 * train_err_data를 generate_new_errcode 함수에 입력하여 새로운 error code 조합을 생성하고 이것을 인코딩
 * test_err_data는 학습 데이터의 인코더를 사용하여 변환함
 * UNKNOWN이 포함된 code는 집계하지 않음
 
-#### 2-2-1. Transform data
-* transform_errtype 함수를 이용해 각 user, day마다의 error dataframe을 error array 형태로 변경
+#### 2-2-1. Transform data (func transform_errtype)
+* 각 user, day마다의 error dataframe을 error array 형태로 변경
 * 이 때, error type과 code는 일별 발생 횟수를 집계함
 * 예외로 error type 38의 error code는 numeric value라 판단하여 발생 횟수가 아닌 code 숫자의 합계에 대한 피쳐 생성
 * error type (42가지) + error code (x가지) + error 38 관련 피쳐 1가지로, (user id 수) x (30) x (x) 형태의 array 반환
 
-#### 2-2-2. Extract feature from error
-* extract_err 함수를 통해 피쳐를 생성함
+#### 2-2-2. Extract feature from error (func extract_err)
+* 에러 type과 code를 통해 피쳐를 생성함
     1. 일별 데이터를 아래 그림과 같이 window마다 summation하여 변환함
 ![img1](img/img1.png)
         * window 길이는 사용자 불만 label을 통해 최적화하여 3일로 선정
@@ -145,11 +111,11 @@ if e == 1:
 * extract_err 함수는 (userid 수) x (error type 수 + error code 수 + 1) 의 형태를 가진 dataframe을 반환함
 
 ### 2-3. Model_nm
-#### 2-3-1. Transform data
-* transform_model_nm 함수를 이용해 각 user, day마다 error dataframe을 model_nm array 형태로 변경
+#### 2-3-1. Transform data (func transform_model_nm)
+* 각 user, day마다 error dataframe을 model_nm array 형태로 변경
 * 이 때, 요일별로 어떤 model_nm이었는지 저장
 
-#### 2-3-2. Extract feature from model_nm
+#### 2-3-2. Extract feature from model_nm (func extract_model_nm)
 * extract_model_nm 함수를 통해 피쳐를 생성하였고 각각에 대한 설명은 다음과 같음
 
 |Feature|Explanation|
@@ -176,14 +142,13 @@ if e == 1:
 |8|04.73.x|5|
 
 ### 2-4. fwver
-#### 2-4-1. Transform data
-* transform_fwver 함수를 이용해 각 user, day마다 error dataframe을 fwver array 형태로 변경
+#### 2-4-1. Transform data (func transform_fwver)
+* 각 user, day마다 error dataframe을 fwver array 형태로 변경
 * 이 때, 요일별로 어떤 fwver였는지 저장
 * fwver이 x. y. z의 형태이므로 이 3가지를 분리하여 저장
 
-#### 2-4-2. Extract feature from fwver
-* extract_fwver 함수를 통해 피쳐를 생성하였고 각각에 대한 설명은 다음과 같음
-* 피쳐의 특성은 model_nm과 유사함
+#### 2-4-2. Extract feature from fwver (func extract_fwver)
+* model_nm과 유사한 방식으로 피쳐 생성
 * fwver의 x. y. z 중 x만 사용하였으며 나머지 자리는 유의미한 모델 성능 향상을 보이지 않아 제외함
 
 |Feature|Explanation|
@@ -194,7 +159,7 @@ if e == 1:
 |fwver_start|유저가 가장 처음에 사용한 fwver에 대한 범주형 변수|
 |fwver_end|유저가 가장 마지막 사용한 fwver에 대한 범주형 변수|
 
-## 3. quality 데이터를 활용한 피쳐 추출
+## 3. quality 데이터를 활용한 피쳐 추출 (func extract_quality_data)
 ### 3-1. Filter quality
 * quality 데이터는 0~12까지 13개의 quality와 fwver로 이루어져있음
 * 다음 표와 같이 quality 데이터 중 중복되거나 의미없는 정보를 삭제
@@ -212,15 +177,15 @@ if e == 1:
     1. quality 중 -1의 발생 횟수를 집계
     2. 5가지의 통계적 특징 추출 (mean, max, min, median, standard deviavion)
 
-## 4. 피쳐 통합
-* feature_extraction 함수를 통해 2~3에서 생성된 피쳐를 통하였으며 다음 순서로 진행됨
+## 4. 피쳐 통합 (func feature_extraction)
+* 상기 2~3에서 생성된 피쳐를 통합하였으며 다음 순서로 진행됨
     1. Extract error type, code
     2. Extract model_nm
     3. Extract fwver
     4. Extract quality 
     5. Concatenate all the dataframes
 
-## 5. 모델 학습
+## 5. 모델 학습 (func lgb_train_model, cat_train_model)
 * lgb_train_model 함수를 이용해 lightgbm 모델 학습 및 추론
 * cat_train_model 함수를 이용해 catboost 모델 학습 및 추론
 * Bayesian optimization을 통해 파라미터를 튜닝하였으며 제출 코드에는 포함하지 않음
