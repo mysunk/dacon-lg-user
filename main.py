@@ -19,7 +19,7 @@ N_ERRTYPE = 42
 N_QUALITY = 13
 
 
-# %% error type과 code를 조합하여 새로운 error type 생성
+# %% Error type과 code 전처리
 from sklearn.preprocessing import LabelEncoder
 
 def process_errcode(errortype, errorcode):
@@ -128,36 +128,20 @@ def process_errcode(errortype, errorcode):
 
     return new_errcode
 
+train_err_df = pd.read_csv(data_path + 'train_err_data.csv')
+err_df = train_err_df.loc[:, 'errtype':'errcode'].copy()
 
-def generate_new_errcode():
-    """
-    train error data에서 process_errcode 함수를 이용하여 새로운 error type을 encoding
+# make unique pairs
+err_df.drop_duplicates(inplace=True)
+err_df = err_df.reset_index(drop=True)
 
-    [Input]
-    없음
+# dataframe을 array로 변경
+errortype = err_df['errtype'].values
+errorcode = err_df['errcode'].values.astype(str)
 
-    [Output]
-    new_errcode: 인코딩된 새로운 error type
-    """
-
-    err_df = pd.read_csv(data_path + 'train_err_data.csv')
-    err_df = err_df.loc[:, 'errtype':'errcode']
-
-    # make unique pairs
-    err_df.drop_duplicates(inplace=True)
-    err_df = err_df.reset_index(drop=True)
-
-    # dataframe을 array로 변경
-    errortype = err_df['errtype'].values
-    errorcode = err_df['errcode'].values.astype(str)
-
-    # process_errcode 함수를 이용해 새로운 error type을 encoding
-    new_errcode = process_errcode(errortype, errorcode)
-    new_errcode = np.unique(new_errcode)
-
-    return new_errcode
-
-new_errcode_tmp = generate_new_errcode()
+# process_errcode 함수를 이용해 새로운 error type을 encoding
+new_errcode = process_errcode(errortype, errorcode)
+new_errcode_tmp = np.unique(new_errcode)
 
 new_errcode = []
 # Unknown 제거
@@ -171,14 +155,17 @@ encoder = LabelEncoder()
 encoder.fit(new_errcode)
 print('Encoding error code is done')
 
+def get_encoder():
+    return encoder
 
-# %% X, y 생성
+# %% 피쳐 생성 함수
 
-def split_error_data_in_day(data_type):
+def split_error_data_in_day(err_df, data_type):
     """
     원본 error_data를 불러와 일별 데이터로 분리
 
     [Input]
+    err_df: train or test error data
     data_type: train or test 지정
 
     [Output]
@@ -189,9 +176,6 @@ def split_error_data_in_day(data_type):
         user_id_list = TRAIN_ID_LIST
     elif data_type == 'test':
         user_id_list = TEST_ID_LIST
-
-    # 데이터 로드
-    err_df = pd.read_csv(data_path + f'{data_type}_err_data.csv')
 
     # 중복 제거
     err_df.drop_duplicates(inplace=True)
@@ -321,7 +305,7 @@ def transform_model_nm(data):
 
 def transform_fwver(data):
     """
-    일별 error dataframe을 이용하여 model_nm을 array형태로 변경
+    일별 error dataframe을 이용하여 fwver array형태로 변경
 
     [Input]
     data: 1일 ~ 31일까지로 분리된 error data dataframe
@@ -350,10 +334,11 @@ def transform_fwver(data):
 
 def extract_err(err_arr, WINDOW):
     """
-    error 30일 데이터를 WINDOW마다 summation하고 하루씩 lag # FIXME
+    1. error 30일 데이터를 WINDOW마다 summation하고 하루씩 lag
+    2. 통계적 피쳐 추출 (min, max, mean, median, standard deviation)
 
     [Input]
-    err_arr: (user id 수) x (day 수 = 30) x (error 수 = N_NEW_ERRCODE + N_ERRTYPE)의 형태를 가진 error array
+    err_arr: (user id 수) x (day 수 = 30) x (error 수 = N_NEW_ERRCODE + N_ERRTYPE + 1)의 형태를 가진 error array
     WINDOW: window length
 
     [OUTPUT]
@@ -373,11 +358,12 @@ def extract_err(err_arr, WINDOW):
     # dataframe의 가독성을 위한 column명 지정
     features = ['min', 'max', 'mean', 'median', 'std']
     data_cols = []
+    errcode_name = encoder.inverse_transform(range(N_NEW_ERRCODE))
     for feature in features:
         for i in range(N_NEW_ERRCODE):
-            data_cols.append('errorcode_' + feature + '_' + str(i))
+            data_cols.append('errorcode_' + errcode_name[i] + '_' + feature)
         for i in range(N_ERRTYPE):
-            data_cols.append('errortype_' + feature + '_' + str(i))
+            data_cols.append('errortype_'+ str(i+1) + '_' + feature)
         data_cols.append('errortype_38_code_summation_' + feature)
     err_df.columns = data_cols
 
@@ -458,14 +444,14 @@ def extract_model_nm(model_arr, id_list):
 
 def extract_fwver(fwver_arr, id_list):
     """
-    model array에서 통계적 특징을 추출
+    일별 fwver array에서 통계적 특징을 추출
 
     [Input]
-    model_arr: (user id 수) x (day 수 = 30) x (model 수 = 9)의 형태를 가진 model array
+    fwver_arr: (user id 수) x (day 수 = 30) x (자리 수 = 3)의 형태를 가진 fwver array
     id_list: train or test id list
 
     [OUTPUT]
-    model_df: model_nm에서 추출된 특징을 조합한 dataframe
+    fwver_df: fwver에서 추출된 특징을 조합한 dataframe
     """
 
     # int type으로 변경
@@ -514,15 +500,16 @@ def extract_fwver(fwver_arr, id_list):
     return fwver_df
 
 
-def transform_extract_quality_data(data_type):
+def extract_quality_data(qual_df, data_type):
     '''
-    quality data에서 feature extraction
+    원본 quality data에서 feature extraction
 
     [Input]
     data_type: train or test 지정
+    qual_df: quality 원본 데이터
 
     [Output]
-    qual_features: quality 데이터의 통계적 특징을 반영한 데이터
+    qual_features: quality 데이터의 통계적 특징을 추출한 데이터
     '''
 
     if data_type == 'train':
@@ -530,26 +517,23 @@ def transform_extract_quality_data(data_type):
     else:
         user_id_list = TEST_ID_LIST
 
-    # 데이터 로드
-    quality = pd.read_csv(data_path + f'{data_type}_quality_data.csv')
-
     # time을 datetime으로 변경
-    quality['time'] = pd.to_datetime(quality['time'], format='%Y%m%d%H%M%S')
+    qual_df['time'] = pd.to_datetime(qual_df['time'], format='%Y%m%d%H%M%S')
 
     # 숫자에 포함된 ','를 제거
-    quality.replace(",", "", regex=True, inplace=True)
+    qual_df.replace(",", "", regex=True, inplace=True)
 
     # quality data의 type을 float으로 변경
-    quality.loc[:, 'quality_0':'quality_12'] = quality.loc[:, 'quality_0':'quality_12'].astype(float)
+    qual_df.loc[:, 'quality_0':'quality_12'] = qual_df.loc[:, 'quality_0':'quality_12'].astype(float)
 
     # drop nan
-    drop_idx = np.any(pd.isnull(quality), axis=1)
-    quality = quality.loc[~drop_idx, :].reset_index(drop=True)
+    drop_idx = np.any(pd.isnull(qual_df), axis=1)
+    qual_df = qual_df.loc[~drop_idx, :].reset_index(drop=True)
 
     # user id별로 그루핑
-    group = quality.groupby('user_id')
+    group = qual_df.groupby('user_id')
     qual_features = pd.DataFrame(index=user_id_list)
-    qual_user_id_list = np.unique(quality['user_id'])
+    qual_user_id_list = np.unique(qual_df['user_id'])
 
     # 각 user id에 대하여 processing
     for user_id in tqdm(qual_user_id_list):
@@ -579,16 +563,19 @@ def transform_extract_quality_data(data_type):
     return qual_features
 
 
-def feature_extraction(data_type):
+def feature_extraction(data_type, err_df, qual_df):
     """
-    다음 순서로 피쳐를 추출
+    데이터 통합 함수이며, 다음 순서로 피쳐를 추출
     1. Extract error type, code
     2. Extract model_nm
     3. Extract fwver
     4. Extract quality
+    5. Concatenate
 
     [Input]
     data_type: train or test
+    err_df: raw error data
+    qual_df: raw quality data
 
     [Output]
     transformed_data: error, model, fwver, quality에서 추출된 피쳐를 합친 데이터
@@ -603,7 +590,7 @@ def feature_extraction(data_type):
     # -------------------------------- error 데이터 처리
     # raw error 데이터를 일별, 유저별로 분리
     print('Splitting error data in day...')
-    err_df_in_day_user = split_error_data_in_day(data_type)
+    err_df_in_day_user = split_error_data_in_day(err_df, data_type)
     data_list = []
     for user_idx in range(n_user):
         data_list.append(err_df_in_day_user[user_idx])
@@ -639,32 +626,17 @@ def feature_extraction(data_type):
     # -------------------------------- quality 데이터 처리
     ### 4. quality data transformation and feature extraction
     print('Extract features from quality...')
-    quality_df = transform_extract_quality_data(data_type)
+    quality_df = extract_quality_data(qual_df, data_type)
     print('Extract features from quality is done')
 
     # -------------------------------- Concatenate features
+    ### 5. Concatenate all the features
     transformed_data = pd.concat([err_df, model_df, fwver_df, quality_df], axis=1)
 
     return transformed_data
 
 
-# X 생성
-print('Feature extraction from train data start')
-train_X = feature_extraction('train')
-print('Feature extraction from train data end')
-
-print('Feature extraction from test data start')
-test_X = feature_extraction('test')
-print('Feature extraction from test data ent')
-
-# y 생성
-train_prob = pd.read_csv(data_path + 'train_problem_data.csv')
-train_y = np.zeros((N_USER_TRAIN))
-train_y[train_prob.user_id.unique() - 10000] = 1
-print('Make train, test and label data is done')
-
-
-# %% 모델 학습
+# %% 모델 학습 함수
 def f_pr_auc(probas_pred, y_true):
     """
     lightgbm custom loss functions
@@ -683,7 +655,7 @@ def f_pr_auc(probas_pred, y_true):
     return "pr_auc", score, True
 
 
-def lgb_train_model(train_x, train_y, params, n_fold, fold_rs=0):
+def lgb_train_model(train_x, train_y, params, n_fold, fold_rs=0, categorical_feature = ['model_start','model_end']):
     """
     lightgbm cross validation with given data
 
@@ -722,8 +694,8 @@ def lgb_train_model(train_x, train_y, params, n_fold, fold_rs=0):
         y = train_y[train_idx]
         valid_y = train_y[val_idx]
 
-        d_train = lgb.Dataset(X, y, categorical_feature=['model_start','model_end'])
-        d_val = lgb.Dataset(valid_x, valid_y, categorical_feature=['model_start','model_end'])
+        d_train = lgb.Dataset(X, y, categorical_feature=categorical_feature)
+        d_val = lgb.Dataset(valid_x, valid_y, categorical_feature=categorical_feature)
 
         # run training
         model = lgb.train(
@@ -804,94 +776,104 @@ def cat_train_model(train_x, train_y, params, n_fold, fold_rs=0):
     return models, valid_probs
 
 
-lgb_param = {
-    'force_col_wise': True,
-    'objective': 'binary',
-    'tree_learner': 'data',
-    'boosting': 'gbdt',
-    'metrics': 'auc',
-    'colsample_bynode': 0.3898135486693247,
-    'colsample_bytree': 0.18842555877544384,
-    'learning_rate': 0.017650166362369914,
-    'min_sum_hessian_in_leaf': 0.06737426241310715,
-    'reg_alpha': 0.8971653884407311,
-    'reg_lambda': 0.11885254289919682,
-    'subsample': 0.960014724793571,
-    'random_state': 0,
-    'verbose': -1,
-    'max_depth': -1,
-    'bagging_freq': 19,
-    'min_data_in_leaf': 25,
-    'max_bin': 5,
-    'n_jobs': 6,
-    'num_leaves': 40,
-}
+# %% 데이터 로드, 피쳐 생성 및 모델 학습
 
-cat_param = {
-    'custom_loss': 'AUC',
-    'bagging_temperature': 0.0002815749995043748,
-    'learning_rate': 0.07949149044006878,
-    'random_strength': 1326.5863036592555,
-    'scale_pos_weight': 0.563214416647416,
-    'subsample': 0.6014021044879473,
-    'colsample_bylevel': 0.46663684733988225,
-    'border_count': 59,
-    'depth': 7,
-    'iterations': 816,
-    'l2_leaf_reg': 47,
-    'thread_count': 48
-}
+if __name__ == '__main__':
+    #  데이터 로드
+    train_qual_df = pd.read_csv(data_path + 'train_quality_data.csv')
+    test_err_df = pd.read_csv(data_path + 'test_err_data.csv')
+    test_qual_df = pd.read_csv(data_path + 'test_quality_data.csv')
+    train_prob = pd.read_csv(data_path + 'train_problem_data.csv')
 
-valid_probs_lgb_list = []
-for i in range(10):
-    # k-fold cross validation의 random state를 바꿔가며 앙상블
-    models_lgb, valid_probs_lgb = lgb_train_model(train_X, train_y, lgb_param, n_fold = 10, fold_rs=i)
-    valid_probs_lgb_list.append(valid_probs_lgb)
-auc_score_lgb = roc_auc_score(train_y, np.mean(valid_probs_lgb_list, axis=0))
-print('Lightgbm validation score:: {:.5f}'.format(auc_score_lgb))
-valid_probs_lgb = np.mean(valid_probs_lgb_list, axis=0)
+    # X 데이터 생성
+    print('Feature extraction from train data start')
+    train_X = feature_extraction('train', train_err_df, train_qual_df)
+    del train_err_df, train_qual_df
+    print('Feature extraction from train data end')
 
-print('Catboost model fitting...')
-valid_probs_cat_list = []
-for i in range(10):
-    # k-fold cross validation의 random state를 바꿔가며 앙상블
-    models_cat, valid_probs_cat = cat_train_model(train_X, train_y, cat_param, n_fold = 10, fold_rs=i)
-    valid_probs_cat_list.append(valid_probs_cat)
-auc_score_cat = roc_auc_score(train_y, np.mean(valid_probs_cat_list, axis=0))
-print('Catboost validation score:: {:.5f}'.format(auc_score_cat))
-valid_probs_cat = np.mean(valid_probs_cat_list, axis=0)
+    print('Feature extraction from test data start')
+    test_X = feature_extraction('test', test_err_df, test_qual_df)
+    del test_err_df, test_qual_df
+    print('Feature extraction from test data ent')
 
-# lightgbm 모델과 catboost 모델을 앙상블
-# 앙상블 weight 조정
-auc_score_ens_list = []
-for i in range(0, 11):
-    auc_score_ens = roc_auc_score(train_y, valid_probs_lgb * (0.1 * i) + valid_probs_cat * (1 - (0.1 * i)))
-    auc_score_ens_list.append(auc_score_ens)
-print('Ensemble validation score:: {:.5f}'.format(np.max(auc_score_ens_list)))
+    # y 데이터 생성
+    train_y = np.zeros((N_USER_TRAIN))
+    train_y[train_prob.user_id.unique() - 10000] = 1
+    print('Make train, test and label data is done')
 
-i = np.argmax(auc_score_ens_list)
-weight = [0.1 * i, (1 - (0.1 * i))]
+    lgb_param = {
+        'force_col_wise': True,
+        'objective': 'binary',
+        'tree_learner': 'data',
+        'boosting': 'gbdt',
+        'metrics': 'auc',
+        'colsample_bynode': 0.3898135486693247,
+        'colsample_bytree': 0.18842555877544384,
+        'learning_rate': 0.017650166362369914,
+        'min_sum_hessian_in_leaf': 0.06737426241310715,
+        'reg_alpha': 0.8971653884407311,
+        'reg_lambda': 0.11885254289919682,
+        'subsample': 0.960014724793571,
+        'random_state': 0,
+        'verbose': -1,
+        'max_depth': -1,
+        'bagging_freq': 19,
+        'min_data_in_leaf': 25,
+        'max_bin': 5,
+        'n_jobs': 6,
+        'num_leaves': 40,
+    }
 
-# %% Inference
-print('Inference for test dataset...')
+    cat_param = {
+        'custom_loss': 'AUC',
+        'bagging_temperature': 0.0002815749995043748,
+        'learning_rate': 0.07949149044006878,
+        'random_strength': 1326.5863036592555,
+        'scale_pos_weight': 0.563214416647416,
+        'subsample': 0.6014021044879473,
+        'colsample_bylevel': 0.46663684733988225,
+        'border_count': 59,
+        'depth': 7,
+        'iterations': 816,
+        'l2_leaf_reg': 47,
+        'thread_count': 48
+    }
 
-submission = pd.read_csv(data_path + '/sample_submission.csv')
+    models_lgb, valid_probs_lgb = lgb_train_model(train_X, train_y, lgb_param, n_fold = 10, fold_rs=0)
+    auc_score_lgb = roc_auc_score(train_y, valid_probs_lgb)
+    print('Lightgbm validation score:: {:.5f}'.format(auc_score_lgb))
 
-# lightgbm prediction
-test_prob_lgb = []
-for model in models_lgb:
-    test_prob_lgb.append(model.predict(test_X))
-test_prob_lgb = np.mean(test_prob_lgb, axis=0)
+    print('Catboost model fitting...')
+    models_cat, valid_probs_cat = cat_train_model(train_X, train_y, cat_param, n_fold = 10, fold_rs=0)
+    auc_score_cat = roc_auc_score(train_y, valid_probs_cat)
+    print('Catboost validation score:: {:.5f}'.format(auc_score_cat))
 
-# catboost prediction
-test_prob_cat = []
-for model in models_cat:
-    test_prob_cat.append(model.predict(test_X))
-test_prob_cat = np.mean(test_prob_cat, axis=0)
+    # lightgbm 모델과 catboost 모델을 앙상블
+    weight = [0.6, 0.4] # 앙상블 weight 지정
+    auc_score_ens = roc_auc_score(train_y, valid_probs_lgb * weight[0] + valid_probs_cat * weight[1])
+    print('Ensemble validation score:: {:.5f}'.format(np.max(auc_score_ens)))
 
-test_prob = test_prob_lgb * weight[0] + test_prob_cat * weight[1]
 
-submission['problem'] = test_prob.reshape(-1)
-submission.to_csv("submission.csv", index=False)
+    # Inference
+    print('Inference for test dataset...')
 
-print('Inference is done')
+    submission = pd.read_csv(data_path + '/sample_submission.csv')
+
+    # lightgbm prediction
+    test_prob_lgb = []
+    for model in models_lgb:
+        test_prob_lgb.append(model.predict(test_X))
+    test_prob_lgb = np.mean(test_prob_lgb, axis=0)
+
+    # catboost prediction
+    test_prob_cat = []
+    for model in models_cat:
+        test_prob_cat.append(model.predict(test_X))
+    test_prob_cat = np.mean(test_prob_cat, axis=0)
+
+    test_prob = test_prob_lgb * weight[0] + test_prob_cat * weight[1]
+
+    submission['problem'] = test_prob.reshape(-1)
+    submission.to_csv("submission.csv", index=False)
+
+    print('Inference is done')

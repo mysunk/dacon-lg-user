@@ -3,3 +3,13 @@ __pycache__
 .ipynb_checkpoints
 etc
 data
+dumbs/
+data_use/
+dumbs/
+jh/
+*_info
+submit
+.ipynb_checkpoints
+tune_results
+submit
+analysis
