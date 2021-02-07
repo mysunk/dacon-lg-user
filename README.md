@@ -9,6 +9,8 @@
      lightgbm == 3.1.1  
      catboost == 0.24.4  
      tqdm == 4.54.0  
+     matplotlib == 3.3.3  
+     lime == 0.2.0.1
 
 * 개발 환경: Windows 10 64비트
 
@@ -34,10 +36,10 @@
 .
 └── main.py # 메인 파일
 └── README.md # main.py의 코드 설명 파일
-└── file1.ipynb # Error 데이터 분석 파일
-└── file2.ipynb # quality 데이터 분석 파일
-└── file2.ipynb # 사용자 불만 제기 원인 분석 파일
-└── img/ # README에 포함된 이미지를 저장한 디렉토리
+└── 에러분석.ipynb # Error 데이터 분석 파일
+└── quality분석.ipynb # quality 데이터 분석, quality와 에러 데이터 분석, XAI 분석
+└── 사용자불만접수원인분석.ipynb # 사용자 불만 제기 원인 분석 파일
+└── img/ # README.md에 포함된 이미지를 저장한 디렉토리
 ```
 
 ## 2. Error 데이터를 활용한 피쳐 추출
@@ -89,7 +91,6 @@ if e == 1:
             new_errcode[np.where(idx)[0][i]] = str(e) + '-' + 'UNKNOWN'
 ```
 * 상기 code snippet으로 처리된 error code processing 결과는 아래 표와 같음
-* 모든 error type에 대한 processing 결과를 표로 정리하면 다음과 같음
 
 |error type|error code|processed errror code|
 |------|------|------|
@@ -99,7 +100,7 @@ if e == 1:
 |1|P-41011|1-P|
 |1|any digit|1-num|
 
-* train_err_data를 generate_new_errcode 함수에 입력하여 새로운 error code 조합을 생성하고 이것을 인코딩
+* train_err_data를 process_errcode 합수에 입력해 새로운 error code 조합을 생성하고 인코더 생성
 * test_err_data는 학습 데이터의 인코더를 사용하여 변환함
 * UNKNOWN이 포함된 code는 집계하지 않음
 
@@ -107,7 +108,7 @@ if e == 1:
 * 각 user, day마다의 error dataframe을 error array 형태로 변경
 * 이 때, error type과 code는 일별 발생 횟수를 집계함
 * 예외로 error type 38의 error code는 numeric value라 판단하여 발생 횟수가 아닌 code 숫자의 합계에 대한 피쳐 생성
-* error type (42가지) + error code (x가지) + error 38 관련 피쳐 1가지로, (user id 수) x (30) x (x) 형태의 array 반환
+* error type (42가지) + error code (98가지) + error 38 관련 피쳐 1가지로, (user id 수) x (30) x (141) 형태의 array 반환
 
 #### 2-2-2. Extract feature from error (func extract_err)
 * 에러 type과 code를 통해 피쳐를 생성함
@@ -203,4 +204,4 @@ if e == 1:
 
 |lightgbm|catboost|ensemble|
 |------|------|------|
-|84.445%|84.419%|84.51%|
+|84.43%|84.10%|84.43%|

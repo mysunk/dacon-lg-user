@@ -877,3 +877,18 @@ if __name__ == '__main__':
     submission.to_csv("submission.csv", index=False)
 
     print('Inference is done')
+
+    # 결과 plot
+    import matplotlib.pyplot as plt
+    import matplotlib
+    font = {'size': 16, 'family':"Malgun Gothic"}
+    matplotlib.rc('font', **font)
+    plt.rcParams['axes.unicode_minus'] = False
+
+    plt.bar(range(3), [auc_score_lgb, auc_score_cat, auc_score_ens], color = 'tab:gray')
+    plt.bar([2], [auc_score_ens], color = 'tab:pink')
+    plt.xticks(range(3),['LGB','CAT','ENS'])
+    plt.title('10-fold cv 성능 비교')
+    plt.ylim([0.84, 0.846])
+    plt.ylabel('AUC')
+    plt.show()
