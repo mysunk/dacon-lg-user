@@ -10,6 +10,7 @@ jh/
 *_info
 submit
 .ipynb_checkpoints
-tune_results
-submit
-analysis
+tune_results/
+submit/
+analysis/
+figs/
