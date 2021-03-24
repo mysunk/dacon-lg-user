@@ -34,12 +34,15 @@
 * 본 README.md 에서는 main.py 함수에 대한 설명만을 담았으며 프로젝트에 포함된 파일은 다음과 같음
 ```setup
 .
-└── main.py # 메인 파일
+└── main.py # 피쳐 생성 및 모델링 메인 파일
+└── main.ipynb # EDA와 모델링 파일
 └── README.md # main.py의 코드 설명 파일
 └── 에러분석.ipynb # Error 데이터 분석 파일
 └── quality분석.ipynb # quality 데이터 분석, quality와 에러 데이터 분석, XAI 분석
 └── 사용자불만접수원인분석.ipynb # 사용자 불만 제기 원인 분석 파일
+└── 사용자불만접수원인분석.ipynb # 사용자 불만 제기 원인 분석 파일
 └── img/ # README.md에 포함된 이미지를 저장한 디렉토리
+└── PPT/ # 발표자료가 포함된 디렉토리
 ```
 * .ipynb 파일은 발표자료 구성에 사용된 plot들을 포함한 분석 파일임
 
