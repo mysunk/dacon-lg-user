@@ -1,6 +1,4 @@
 # [DACON] 시스템 품질 변화로 인한 사용자 불편 예지 AI 경진대회
-* 제출일: 2020-02-07
-* 팀명: asdf
 
 * 사용 library 및 version:  
     > pandas == 1.1.4  
